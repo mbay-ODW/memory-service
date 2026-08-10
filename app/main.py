@@ -34,8 +34,11 @@ async def healthz() -> dict:
     return {"status": "ok"}
 
 
+# NOT "/static": that path is reserved by the shared Traefik rule template (proxied to
+# Authelia's own consent-screen assets on every MCP host here) -- harmless for services with
+# no web UI of their own, but this one has real assets that would collide with Authelia's.
 app.mount(
-    "/static", StaticFiles(directory=str(Path(__file__).parent / "web" / "static")), name="static"
+    "/assets", StaticFiles(directory=str(Path(__file__).parent / "web" / "static")), name="assets"
 )
 app.include_router(web_router)
 app.mount("/mcp", mcp_app)

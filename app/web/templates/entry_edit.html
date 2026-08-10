@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ "Neuer Eintrag" if mode == "new" else "Bearbeiten: " + entry.title }} — memory-service{% endblock %}
 {% block head %}
-  <link rel="stylesheet" href="/static/vendor/easymde/easymde.min.css">
+  <link rel="stylesheet" href="/assets/vendor/easymde/easymde.min.css">
 {% endblock %}
 {% block content %}
   <nav class="breadcrumb">
@@ -50,7 +50,7 @@
     </div>
   </form>
 
-  <script src="/static/vendor/easymde/easymde.min.js"></script>
+  <script src="/assets/vendor/easymde/easymde.min.js"></script>
   <script>
     new EasyMDE({ element: document.getElementById("body_markdown"), spellChecker: false });
   </script>
