@@ -10,6 +10,7 @@
   <div class="entry-header">
     <h1>{{ entry.title }}</h1>
     <div class="entry-actions">
+      <button type="button" class="button" id="copy-content-button">Inhalt kopieren</button>
       <a class="button" href="/entries/{{ entry.id }}/edit">Bearbeiten</a>
       <a class="button" href="/entries/{{ entry.id }}/history">Verlauf</a>
     </div>
@@ -33,4 +34,22 @@
   <article class="markdown-body">
     {{ rendered_html|safe }}
   </article>
+
+  <textarea id="raw-markdown-source" hidden>{{ entry.body_markdown }}</textarea>
+  <script>
+    (function () {
+      const button = document.getElementById("copy-content-button");
+      const source = document.getElementById("raw-markdown-source");
+      const defaultLabel = button.textContent;
+      button.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(source.value);
+          button.textContent = "Kopiert!";
+        } catch (err) {
+          button.textContent = "Kopieren fehlgeschlagen";
+        }
+        setTimeout(() => { button.textContent = defaultLabel; }, 1500);
+      });
+    })();
+  </script>
 {% endblock %}

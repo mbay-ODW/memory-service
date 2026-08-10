@@ -60,6 +60,8 @@ async def test_full_web_ui_flow(web_client):
     assert resp.status_code == 200
     assert "Web UI Flow Eintrag" in resp.text
     assert "<strong>Test</strong>" in resp.text
+    assert 'id="copy-content-button"' in resp.text
+    assert "# Hallo\n\nEin **Test**." in resp.text  # raw markdown source, in the hidden textarea
 
     entry_id = entry_url.rsplit("/", 1)[-1]
 
