@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Verlauf: {{ entry.title }} — memory-service{% endblock %}
+{% block content %}
+  <nav class="breadcrumb">
+    <a href="/">Projekte</a> /
+    <a href="/projects/{{ project.slug }}">{{ project.name }}</a> /
+    <a href="/entries/{{ entry.id }}">{{ entry.title }}</a> / Verlauf
+  </nav>
+
+  <h1>Verlauf: {{ entry.title }}</h1>
+
+  <table class="entry-table">
+    <thead><tr><th>Datum</th><th>Von</th><th>Git-Commit</th><th></th></tr></thead>
+    <tbody>
+      {% for version in versions %}
+        <tr>
+          <td>{{ version.created_at.strftime("%Y-%m-%d %H:%M:%S") if version.created_at else "" }}</td>
+          <td>{{ version.created_by }}</td>
+          <td><code>{{ version.git_commit_hash[:10] }}</code></td>
+          <td><a href="/entries/{{ entry.id }}/history/{{ version.id }}/diff">Diff</a></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

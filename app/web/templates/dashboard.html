@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}memory-service — Dashboard{% endblock %}
+{% block content %}
+  <h1>Projekte</h1>
+  <div class="project-grid">
+    {% for project in projects %}
+      <a class="project-card" href="/projects/{{ project.slug }}">
+        <span class="badge badge-{{ project.sensitivity_level }}">{{ project.sensitivity_level }}</span>
+        <h2>{{ project.name }}</h2>
+      </a>
+    {% else %}
+      <p class="empty">Noch keine Projekte.</p>
+    {% endfor %}
+  </div>
+
+  <h1>Offene Punkte</h1>
+  {% if open_entries %}
+    <table class="entry-table">
+      <thead><tr><th>Titel</th><th>Status</th><th>Aktualisiert</th></tr></thead>
+      <tbody>
+        {% for entry in open_entries %}
+          <tr>
+            <td><a href="/entries/{{ entry.id }}">{{ entry.title }}</a></td>
+            <td><span class="badge badge-followup">{{ entry.follow_up_status }}</span></td>
+            <td>{{ entry.updated_at.strftime("%Y-%m-%d %H:%M") if entry.updated_at else "" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">Nichts Offenes. 🎉</p>
+  {% endif %}
+{% endblock %}

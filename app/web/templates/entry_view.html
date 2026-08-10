@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ entry.title }} — memory-service{% endblock %}
+{% block content %}
+  <nav class="breadcrumb">
+    <a href="/">Projekte</a> /
+    <a href="/projects/{{ project.slug }}">{{ project.name }}</a> /
+    <a href="/projects/{{ project.slug }}/{{ subtopic_path }}">{{ subtopic_path }}</a>
+  </nav>
+
+  <div class="entry-header">
+    <h1>{{ entry.title }}</h1>
+    <div class="entry-actions">
+      <a class="button" href="/entries/{{ entry.id }}/edit">Bearbeiten</a>
+      <a class="button" href="/entries/{{ entry.id }}/history">Verlauf</a>
+    </div>
+  </div>
+
+  <div class="entry-meta">
+    <span class="badge badge-{{ project.sensitivity_level }}">{{ project.sensitivity_level }}</span>
+    <span class="badge badge-status-{{ entry.status }}">{{ entry.status }}</span>
+    {% if entry.follow_up_status %}<span class="badge badge-followup">{{ entry.follow_up_status }}</span>{% endif %}
+    {% for tag in entry.tags %}<span class="tag">{{ tag.name }}</span>{% endfor %}
+    <span class="meta-line">zuletzt geändert {{ entry.updated_at.strftime("%Y-%m-%d %H:%M") if entry.updated_at else "" }} von {{ entry.updated_by }}</span>
+  </div>
+
+  {% if sources %}
+    <div class="sources">
+      Quellen:
+      {% for s in sources %}<span class="tag">{{ s.source_type }}:{{ s.source_ref }}</span>{% endfor %}
+    </div>
+  {% endif %}
+
+  <article class="markdown-body">
+    {{ rendered_html|safe }}
+  </article>
+{% endblock %}

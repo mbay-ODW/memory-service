@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Suche — memory-service{% endblock %}
+{% block content %}
+  <h1>Suche</h1>
+  <form action="/search" method="get" class="search-form">
+    <input type="search" name="q" value="{{ query }}" placeholder="Volltext + semantisch..." autofocus>
+    <button type="submit" class="button button-primary">Suchen</button>
+  </form>
+
+  {% if query %}
+    {% if results %}
+      <table class="entry-table">
+        <thead><tr><th>Titel</th><th>Tags</th><th>Status</th><th>Aktualisiert</th></tr></thead>
+        <tbody>
+          {% for entry in results %}
+            <tr>
+              <td><a href="/entries/{{ entry.id }}">{{ entry.title }}</a></td>
+              <td>{% for tag in entry.tags %}<span class="tag">{{ tag.name }}</span>{% endfor %}</td>
+              <td>{% if entry.follow_up_status %}<span class="badge badge-followup">{{ entry.follow_up_status }}</span>{% endif %}</td>
+              <td>{{ entry.updated_at.strftime("%Y-%m-%d %H:%M") if entry.updated_at else "" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty">Keine Treffer für „{{ query }}“.</p>
+    {% endif %}
+  {% endif %}
+{% endblock %}

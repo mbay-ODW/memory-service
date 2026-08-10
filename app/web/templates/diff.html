@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Diff: {{ entry.title }} — memory-service{% endblock %}
+{% block content %}
+  <nav class="breadcrumb">
+    <a href="/">Projekte</a> /
+    <a href="/projects/{{ project.slug }}">{{ project.name }}</a> /
+    <a href="/entries/{{ entry.id }}">{{ entry.title }}</a> /
+    <a href="/entries/{{ entry.id }}/history">Verlauf</a> / Diff
+  </nav>
+
+  <h1>Diff: {{ entry.title }}</h1>
+  <p class="meta-line">Version vom {{ version.created_at.strftime("%Y-%m-%d %H:%M:%S") if version.created_at else "" }} von {{ version.created_by }} (<code>{{ version.git_commit_hash[:10] }}</code>)</p>
+
+  <div class="diff-wrapper">
+    {{ diff_html|safe }}
+  </div>
+{% endblock %}

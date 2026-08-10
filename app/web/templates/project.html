@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — memory-service{% endblock %}
+{% block content %}
+  <nav class="breadcrumb">
+    <a href="/">Projekte</a> / <span class="badge badge-{{ project.sensitivity_level }}">{{ project.sensitivity_level }}</span>
+    <a href="/projects/{{ project.slug }}">{{ project.name }}</a>
+    {% if subtopic_path %} / {{ subtopic_path }}{% endif %}
+  </nav>
+
+  <div class="project-layout">
+    <aside class="tree">
+      <p><a href="/projects/{{ project.slug }}"{% if not subtopic_path %} class="active"{% endif %}>({{ project.name }})</a></p>
+      {% macro render_node(node) %}
+        <li>
+          <a href="/projects/{{ project.slug }}/{{ node.path }}"{% if node.path == subtopic_path %} class="active"{% endif %}>{{ node.subtopic.name }}</a>
+          {% if node.children %}
+            <ul>
+              {% for child in node.children %}{{ render_node(child) }}{% endfor %}
+            </ul>
+          {% endif %}
+        </li>
+      {% endmacro %}
+      <ul>
+        {% for node in tree %}{{ render_node(node) }}{% endfor %}
+      </ul>
+    </aside>
+
+    <section class="entries">
+      <div class="entries-header">
+        <h1>{{ project.name }}{% if subtopic_path %} / {{ subtopic_path }}{% endif %}</h1>
+        <a class="button" href="/entries/new?project={{ project.slug }}&amp;subtopic={{ subtopic_path or '' }}">+ Neuer Eintrag</a>
+      </div>
+      {% if entries %}
+        <table class="entry-table">
+          <thead><tr><th>Titel</th><th>Tags</th><th>Status</th><th>Aktualisiert</th></tr></thead>
+          <tbody>
+            {% for entry in entries %}
+              <tr>
+                <td><a href="/entries/{{ entry.id }}">{{ entry.title }}</a></td>
+                <td>{% for tag in entry.tags %}<span class="tag">{{ tag.name }}</span>{% endfor %}</td>
+                <td>{% if entry.follow_up_status %}<span class="badge badge-followup">{{ entry.follow_up_status }}</span>{% endif %}</td>
+                <td>{{ entry.updated_at.strftime("%Y-%m-%d %H:%M") if entry.updated_at else "" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="empty">Noch keine Einträge hier.</p>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

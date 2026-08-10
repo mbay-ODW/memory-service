@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ "Neuer Eintrag" if mode == "new" else "Bearbeiten: " + entry.title }} — memory-service{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="/static/vendor/easymde/easymde.min.css">
+{% endblock %}
+{% block content %}
+  <nav class="breadcrumb">
+    <a href="/">Projekte</a> /
+    <a href="/projects/{{ project.slug }}">{{ project.name }}</a>
+    {% if subtopic_path %} / <a href="/projects/{{ project.slug }}/{{ subtopic_path }}">{{ subtopic_path }}</a>{% endif %}
+  </nav>
+
+  <h1>{{ "Neuer Eintrag" if mode == "new" else "Bearbeiten" }}</h1>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <form method="post" action="{{ '/entries/new' if mode == 'new' else '/entries/' + entry.id|string + '/edit' }}">
+    {% if mode == "new" %}
+      <input type="hidden" name="project" value="{{ project.slug }}">
+      <label>Unterthema (z. B. <code>kunde-mueller/vorgang-2026-08</code>)
+        <input type="text" name="subtopic" value="{{ subtopic_path }}" required>
+      </label>
+    {% else %}
+      <label>Unterthema<input type="text" value="{{ subtopic_path }}" disabled></label>
+    {% endif %}
+
+    <label>Titel
+      <input type="text" name="title" value="{{ entry.title if entry else '' }}" required>
+    </label>
+
+    <label>Inhalt (Markdown)
+      <textarea id="body_markdown" name="body_markdown">{{ entry.body_markdown if entry else '' }}</textarea>
+    </label>
+
+    <label>Tags (kommagetrennt)
+      <input type="text" name="tags" value="{{ tags_csv }}">
+    </label>
+
+    <label>Status
+      <select name="follow_up_status">
+        <option value="none" {{ "selected" if not entry or not entry.follow_up_status else "" }}>—</option>
+        <option value="offen" {{ "selected" if entry and entry.follow_up_status == "offen" else "" }}>offen</option>
+        <option value="wartet" {{ "selected" if entry and entry.follow_up_status == "wartet" else "" }}>wartet</option>
+      </select>
+    </label>
+
+    <div class="form-actions">
+      <button type="submit" class="button button-primary">Speichern</button>
+      {% if entry %}<a class="button" href="/entries/{{ entry.id }}">Abbrechen</a>{% endif %}
+    </div>
+  </form>
+
+  <script src="/static/vendor/easymde/easymde.min.js"></script>
+  <script>
+    new EasyMDE({ element: document.getElementById("body_markdown"), spellChecker: false });
+  </script>
+{% endblock %}

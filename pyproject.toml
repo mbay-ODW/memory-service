@@ -1,0 +1,46 @@
+[project]
+name = "memory-service"
+version = "0.1.0"
+description = "Self-hosted, versioned project memory for Cowork (MCP + web UI)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "fastmcp>=2.3",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.13",
+    "pgvector>=0.3.6",
+    "pydantic-settings>=2.6",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.12",
+    "gitpython>=3.1",
+    "sentence-transformers>=3.3",
+    "httpx>=0.27",
+    "python-frontmatter>=1.1",
+    "python-slugify>=8.0",
+    "markdown>=3.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# session-scoped loop: app/db/base.py's engine (and its asyncpg pool) is a process-lifetime
+# singleton, matching real usage (one event loop for the app's whole life under uvicorn) --
+# per-test loops would reuse that pool across loops and asyncpg rejects that.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
