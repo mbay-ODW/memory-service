@@ -6,7 +6,10 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # NOT github.repository: GHCR requires an all-lowercase repository name, but the GitHub org
+  # here is "mbay-ODW" (mixed case) -- hardcoded lowercase, matching every other image in this
+  # org (ghcr.io/mbay-odw/...).
+  IMAGE_NAME: mbay-odw/memory-service
 
 jobs:
   build-and-push:
