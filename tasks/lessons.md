@@ -3,6 +3,30 @@
 Non-obvious gotchas hit while building this repo. Read before touching app/db, app/services,
 or tests/conftest.py.
 
+## TrueNAS deploy: the Traefik rule template assumes "no web UI of its own" — this service breaks that assumption
+
+Every other self-hosted MCP server here (signal-mcp, instagram-*, mail-mcp, ...) is a pure
+API/MCP backend with nothing meaningful at `/` or `/static`, so their shared Traefik
+file-provider rule template routes `Path(/)` and `PathPrefix(/static)` to Authelia's own
+login/consent UI unconditionally -- harmless for them. This service has a real dashboard at
+`/` and real CSS/JS under what would've been `/static`, so copying the template verbatim
+silently shadowed both. Fixed by (1) renaming the app's static mount to `/assets` (see
+`app/main.py`) instead of touching the shared `/static` convention every other client relies
+on, and (2) dropping the `-root` router from `/mnt/apps/traefik/data/traefik2/rules/
+memory-service.yml` entirely. **If this service ever needs another top-level path added to
+its own routes, check it doesn't collide with the reserved auth-flow paths first**:
+`/authorize`, `/api/oidc`, `/api`, `/consent`, `/static`, `/.well-known`.
+
+## Portainer `updateLocalStack` does NOT preserve a stack's env vars if you omit `env`
+
+Redeploying stack 59 without re-passing the `env` array (thinking it would just reuse what
+was already stored) silently cleared `DB_PASSWORD`/`OIDC_CLIENT_SECRET` to empty, which broke
+the DB connection on the very next container recreate (`InvalidPasswordError` -- Postgres
+itself was untouched and still had the real password, only the app's interpolated connection
+string went empty). Fixed by re-issuing the update with the full `env` array. **Always pass
+the complete `env` array on every `updateLocalStack` call**, even ones that only bump the
+image tag.
+
 ## AsyncSession + relationship attributes: never touch them synchronously unless you KNOW they're loaded
 
 Every `MissingGreenlet` error hit during this build traced back to the same root cause: code

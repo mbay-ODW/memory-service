@@ -35,14 +35,39 @@ Full design doc: `/Users/mbayram/.claude/plans/lazy-humming-possum.md`
       would have silently created a duplicate entry on a title edit from the UI
 - [x] tests/test_web_ui.py — full flow incl. rename, diff, search, 404, 409-on-collision
 
-## Checkpoint A verification (in progress)
+## Checkpoint A verification — done
 - [x] `pytest` green (22 tests) run twice back-to-back against the same DB (proves no
       state-leak between runs)
-- [ ] Rebuild the production Docker image with all Phase 0-4 code, confirm it starts clean
-- [ ] Run migrations + seed script against the dev `memory` DB (not `memory_test`)
-- [ ] Visual pass through the running web UI in an actual browser
-- [ ] `scripts/reembed_all.py` dry-run against seed data
+- [x] Rebuild the production Docker image with all Phase 0-4 code, confirm it starts clean
+- [x] Run migrations + seed script against the dev `memory` DB (not `memory_test`)
+- [x] Visual pass through the running web UI in an actual browser
+- [x] `scripts/reembed_all.py` dry-run against seed data
+- [x] Repo pushed to `github.com/mbay-ODW/memory-service` (private), CI green (test + build)
 
-## Explicitly NOT started (Checkpoint B — needs separate go-ahead)
-Phase 5 (TrueNAS deploy: Portainer stack, Traefik rule, Authelia client), Phase 6 (Cowork
-pilot wiring), Phase 7 (RLS hardening, audit logging).
+## Checkpoint B — TrueNAS deployment (done, 2026-08-10)
+- [x] GHCR package flipped to Public (manual, user did it)
+- [x] `/mnt/apps/memory-service/{db,git}` created
+- [x] Authelia OIDC client `memory-service` added (bcrypt secret, config validated before
+      restart), `docker restart authelia`
+- [x] Portainer local stack 59 (`db` + `memory-service`, `traefik` net + internal net)
+- [x] Traefik file-provider rule `memory-service.yml` — **deviates from the signal-mcp
+      template on purpose**: no `-root` router and `/static` renamed to `/assets` in the app,
+      because unlike the other MCP servers here, this one has its own dashboard + static
+      assets that the template's blanket "send `/` and `/static` to Authelia" would shadow.
+      Caught live (user noticed `/` showed Authelia's login page) and fixed in both the
+      Traefik rule and the app (commit `7bdbeac`).
+- [x] Migrations run against the production DB (starts empty — dev seed data was never
+      pushed here, intentionally)
+- [x] Live smoke test: `/` → dashboard, `/assets/style.css` → 200, `/mcp` without token →
+      401, `/.well-known/oauth-authorization-server` → 200
+- [x] **Lesson for next redeploy**: `updateLocalStack` does NOT preserve a stack's previously
+      set env vars if you omit `env` on the call — it clears them. Broke the DB connection
+      once for exactly this reason (mid-deploy). Always re-pass the full `env` array
+      (`DB_PASSWORD`, `OIDC_CLIENT_SECRET`) on every `updateLocalStack` call, even ones that
+      only change the image tag.
+
+Connector URL: `https://memory-service.bay-ram.de/mcp`
+
+## Not started (needs separate go-ahead)
+Phase 6 (Cowork pilot wiring: connector + Standing Instruction + Scheduled Task for Interne
+IT), Phase 7 (RLS hardening, audit logging, before Privat/GEB/Steuer rollout).
