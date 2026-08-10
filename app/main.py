@@ -12,10 +12,15 @@ from app.web.routes import router as web_router
 
 configure_logging()
 
-# path="/" here + app.mount("/mcp", mcp_app) below is deliberate: FastMCP registers its route
-# relative to the sub-app's own root, so mounting at "/mcp" is what makes the final route
-# "/mcp" (not "/mcp/mcp"). Verified against a running TestClient, not assumed.
-mcp_app = mcp.http_app(path="/", middleware=[Middleware(BearerAuthMiddleware)])
+# path="/mcp" here + app.mount("/", mcp_app) below (registered LAST, see bottom of file) is
+# deliberate, and the OPPOSITE of the first version of this file. That version used
+# path="/" + mount("/mcp", ...): a request to the bare "/mcp" (no trailing slash) then had to
+# be redirected by Starlette to "/mcp/" so the sub-app's root route would match -- real MCP
+# clients (verified: Claude's own connector) don't follow that redirect and just report the
+# call as failed. Registering the sub-app's own route directly at "/mcp" and mounting it at
+# "/" makes the path match exactly, with no redirect ever involved. Verified against a
+# running TestClient with follow_redirects=False, not assumed.
+mcp_app = mcp.http_app(path="/mcp", middleware=[Middleware(BearerAuthMiddleware)])
 
 
 @asynccontextmanager
@@ -41,4 +46,7 @@ app.mount(
     "/assets", StaticFiles(directory=str(Path(__file__).parent / "web" / "static")), name="assets"
 )
 app.include_router(web_router)
-app.mount("/mcp", mcp_app)
+# Mounted LAST and at "/": Starlette matches routes in registration order, so the concrete
+# routes above (healthz, /assets, web_router's paths) are tried first and only requests that
+# don't match any of them (i.e. "/mcp") fall through to this mount.
+app.mount("/", mcp_app)

@@ -35,3 +35,12 @@ def test_healthz_does_not_require_auth():
     with TestClient(app) as client:
         resp = client.get("/healthz")
     assert resp.status_code == 200
+
+
+def test_post_mcp_does_not_redirect():
+    """Regression test: real MCP clients (Claude's own connector, verified live) don't follow
+    redirects, so a POST to the bare "/mcp" path (no trailing slash) must be handled directly
+    -- not 307'd to "/mcp/" the way a naive path="/" + mount("/mcp", ...) setup does."""
+    with TestClient(app, follow_redirects=False) as client:
+        resp = client.post("/mcp", json=_INITIALIZE, headers={**_HEADERS, "Authorization": "Bearer test-token"})
+    assert resp.status_code == 200
