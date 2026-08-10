@@ -66,7 +66,7 @@ Full design doc: `/Users/mbayram/.claude/plans/lazy-humming-possum.md`
       (`DB_PASSWORD`, `OIDC_CLIENT_SECRET`) on every `updateLocalStack` call, even ones that
       only change the image tag.
 
-Connector URL: `https://memory-service.bay-ram.de/mcp`
+Connector URL: `https://memory-service.your-domain.example/mcp`
 
 ## Not started (needs separate go-ahead)
 Phase 6 (Cowork pilot wiring: connector + Standing Instruction + Scheduled Task for Interne

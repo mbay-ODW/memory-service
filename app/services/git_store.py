@@ -1,12 +1,13 @@
 """Plain (non-bare) git working-tree repo that materializes the entry version history.
 
 One .md file per entry, path = '<project>/<subtopic>/.../<entry-slug>.md'. This is the ONLY
-place that touches the git repo — services/entries.py is the only caller. Every write here is
-synchronous (GitPython shells out to `git`); callers run it via asyncio.to_thread and serialize
-concurrent writers with the app-level lock in entries.py, since this is a single shared working
-tree, not one-repo-per-writer.
+place that touches the git repo — services/entries.py and services/projects.py are the only
+callers. Every write here is synchronous (GitPython shells out to `git`); callers run it via
+asyncio.to_thread and serialize with `git_write_lock` below, since this is a single shared
+working tree, not one-repo-per-writer.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,10 @@ from git.exc import InvalidGitRepositoryError
 from app.config import get_settings
 
 _COMMITTER = Actor("memory-service", "memory-service@internal.local")
+
+# Serializes every write to the shared git working tree across all callers (entries.py,
+# projects.py). One process, one repo -- import this rather than making a second lock.
+git_write_lock = asyncio.Lock()
 
 _store: "GitStore | None" = None
 
@@ -65,6 +70,22 @@ class GitStore:
             if old_full_path.exists():
                 self.repo.index.remove([str(old_full_path)], working_tree=True)
 
+        author = Actor(author_name, "memory-service@internal.local")
+        commit = self.repo.index.commit(message, author=author, committer=_COMMITTER)
+        return commit.hexsha
+
+    def remove_path_and_commit(self, relative_dir: str, message: str, author_name: str) -> str | None:
+        """Remove an entire directory (a deleted project or subtopic) in one commit. Returns
+        None (no commit made) if the path doesn't exist or has nothing tracked under it -- a
+        freshly created project/subtopic may never have had an entry written into it."""
+        full_path = self.repo_path / relative_dir
+        if not full_path.exists():
+            return None
+        tracked = self.repo.git.ls_files(str(full_path))
+        if not tracked:
+            return None
+
+        self.repo.git.rm("-r", str(full_path))
         author = Actor(author_name, "memory-service@internal.local")
         commit = self.repo.index.commit(message, author=author, committer=_COMMITTER)
         return commit.hexsha

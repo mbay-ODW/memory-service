@@ -98,3 +98,34 @@ async def test_memory_list_open(mcp_client):
     )
     open_items = await mcp_client.call_tool("memory_list_open", {"project": "mcptest"})
     assert any(e["title"] == "Offener MCP Punkt" for e in open_items.data)
+
+
+async def test_memory_create_project_then_upsert_into_it(mcp_client):
+    created = await mcp_client.call_tool(
+        "memory_create_project",
+        {"name": "MCP Neues Projekt", "sensitivity_level": "niedrig", "description": "Via MCP erstellt."},
+    )
+    assert created.data["slug"] == "mcp-neues-projekt"
+    assert created.data["description"] == "Via MCP erstellt."
+
+    # the whole point: memory_upsert must work against a project that didn't exist a moment ago
+    entry = await mcp_client.call_tool(
+        "memory_upsert",
+        {
+            "project": "mcp-neues-projekt",
+            "subtopic": "erstes-thema",
+            "title": "Erster Eintrag",
+            "body_markdown": "...",
+        },
+    )
+    assert entry.data["title"] == "Erster Eintrag"
+
+
+async def test_memory_create_project_rejects_duplicate(mcp_client):
+    await mcp_client.call_tool(
+        "memory_create_project", {"name": "Doppeltes MCP Projekt", "sensitivity_level": "niedrig"}
+    )
+    with pytest.raises(Exception):
+        await mcp_client.call_tool(
+            "memory_create_project", {"name": "Doppeltes MCP Projekt", "sensitivity_level": "niedrig"}
+        )

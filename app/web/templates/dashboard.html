@@ -1,12 +1,16 @@
 {% extends "base.html" %}
 {% block title %}memory-service — Dashboard{% endblock %}
 {% block content %}
-  <h1>Projekte</h1>
+  <div class="entries-header">
+    <h1>Projekte</h1>
+    <a class="button" href="/projects/new">+ Neues Projekt</a>
+  </div>
   <div class="project-grid">
     {% for project in projects %}
       <a class="project-card" href="/projects/{{ project.slug }}">
         <span class="badge badge-{{ project.sensitivity_level }}">{{ project.sensitivity_level }}</span>
         <h2>{{ project.name }}</h2>
+        <p class="stats-line">{{ project_stats.get(project.id, {}).get("entry_count", 0) }} Einträge</p>
       </a>
     {% else %}
       <p class="empty">Noch keine Projekte.</p>

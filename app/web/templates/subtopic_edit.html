@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Bearbeiten: {{ subtopic.name }} — memory-service{% endblock %}
+{% block content %}
+  <nav class="breadcrumb">
+    <a href="/">Projekte</a> /
+    <a href="/projects/{{ project.slug }}">{{ project.name }}</a> /
+    <a href="/projects/{{ project.slug }}/{{ subtopic_path }}">{{ subtopic_path }}</a>
+  </nav>
+
+  <h1>Unterthema bearbeiten</h1>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <form method="post" action="/subtopics/{{ subtopic.id }}/edit">
+    <label>Name
+      <input type="text" name="name" value="{{ subtopic.name }}" required>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="button button-primary">Speichern</button>
+      <a class="button" href="/projects/{{ project.slug }}/{{ subtopic_path }}">Abbrechen</a>
+    </div>
+  </form>
+
+  <section class="danger-zone">
+    <h2>Danger Zone</h2>
+    <p>
+      Löschen entfernt {% if descendant_count > 0 %}<strong>{{ descendant_count }} verschachtelte Unterthemen</strong> und {% endif %}
+      <strong>{{ entry_count }} Einträge</strong> unwiderruflich aus der Datenbank.
+      Die Git-Historie bleibt erhalten.
+    </p>
+    <form method="post" action="/subtopics/{{ subtopic.id }}/delete" class="danger-form">
+      <label>Zum Bestätigen <code>{{ subtopic.slug }}</code> eingeben
+        <input type="text" name="confirm_slug" placeholder="{{ subtopic.slug }}" required>
+      </label>
+      <button type="submit" class="button button-danger">Unterthema löschen</button>
+    </form>
+  </section>
+{% endblock %}

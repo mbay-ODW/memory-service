@@ -22,10 +22,7 @@ from app.db.repository import (
 )
 from app.services import sources as sources_service
 from app.services.embeddings import embed_passage_async
-from app.services.git_store import get_git_store
-
-# Serializes writes to the shared git working tree. One process, one repo -- see git_store.py.
-_git_write_lock = asyncio.Lock()
+from app.services.git_store import get_git_store, git_write_lock
 
 
 async def _set_tags(session: AsyncSession, entry: Entry, tag_names: list[str]) -> None:
@@ -106,7 +103,7 @@ async def _finalize_write(
     message = f"{action}: {path_parts[0]}/{subtopic_path_str}/{entry.slug}\n\nby {actor}"
 
     try:
-        async with _git_write_lock:
+        async with git_write_lock:
             commit_hash = await asyncio.to_thread(
                 get_git_store().write_and_commit,
                 new_relative_path,

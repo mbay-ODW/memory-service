@@ -128,3 +128,88 @@ async def test_edit_title_collision_shows_error_not_500(web_client):
 async def test_unknown_project_returns_404(web_client):
     resp = await web_client.get("/projects/does-not-exist")
     assert resp.status_code == 404
+
+
+async def test_create_edit_delete_project_via_ui(web_client):
+    resp = await web_client.post(
+        "/projects/new",
+        data={"name": "UI Test Projekt", "sensitivity_level": "mittel", "description": "Kontext fuer Tester."},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/projects/ui-test-projekt"
+
+    resp = await web_client.get("/projects/ui-test-projekt")
+    assert resp.status_code == 200
+    assert "Kontext fuer Tester." in resp.text
+    assert "0 Einträge" in resp.text
+
+    await web_client.post(
+        "/entries/new",
+        data={
+            "project": "ui-test-projekt",
+            "subtopic": "thema-a",
+            "title": "Ein Eintrag",
+            "body_markdown": "12345",
+        },
+    )
+
+    resp = await web_client.get("/projects/ui-test-projekt")
+    assert "1 Einträge · 5 Zeichen · 1 Unterthemen" in resp.text
+
+    resp = await web_client.post(
+        "/projects/ui-test-projekt/edit",
+        data={"name": "UI Test Projekt Umbenannt", "description": "Neuer Kontext."},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/projects/ui-test-projekt"  # slug unchanged
+
+    resp = await web_client.get("/projects/ui-test-projekt")
+    assert "UI Test Projekt Umbenannt" in resp.text
+    assert "Neuer Kontext." in resp.text
+
+    # wrong confirm -> error, not a 500, project still there
+    resp = await web_client.post("/projects/ui-test-projekt/delete", data={"confirm_slug": "falsch"})
+    assert resp.status_code == 409
+    resp = await web_client.get("/projects/ui-test-projekt")
+    assert resp.status_code == 200
+
+    # correct confirm -> deleted
+    resp = await web_client.post("/projects/ui-test-projekt/delete", data={"confirm_slug": "ui-test-projekt"})
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
+    resp = await web_client.get("/projects/ui-test-projekt")
+    assert resp.status_code == 404
+
+
+async def test_rename_and_delete_subtopic_via_ui(web_client):
+    await web_client.post(
+        "/projects/new", data={"name": "Subthema UI Test", "sensitivity_level": "niedrig", "description": ""}
+    )
+    resp = await web_client.post(
+        "/entries/new",
+        data={
+            "project": "subthema-ui-test",
+            "subtopic": "mein-thema",
+            "title": "Eintrag",
+            "body_markdown": "...",
+        },
+    )
+    entry_id = resp.headers["location"].rsplit("/", 1)[-1]
+    # pull the subtopic id via the tree's edit link on the project page (not present on the entry page)
+    project_resp = await web_client.get("/projects/subthema-ui-test")
+    subtopic_id = re.search(r"/subtopics/([0-9a-f-]{36})/edit", project_resp.text).group(1)
+
+    resp = await web_client.post(f"/subtopics/{subtopic_id}/edit", data={"name": "Mein Umbenanntes Thema"})
+    assert resp.status_code == 303
+    resp = await web_client.get("/projects/subthema-ui-test")
+    assert "Mein Umbenanntes Thema" in resp.text
+
+    # wrong confirm -> error
+    resp = await web_client.post(f"/subtopics/{subtopic_id}/delete", data={"confirm_slug": "falsch"})
+    assert resp.status_code == 409
+
+    # correct confirm -> gone, and its entry cascaded away
+    resp = await web_client.post(f"/subtopics/{subtopic_id}/delete", data={"confirm_slug": "mein-thema"})
+    assert resp.status_code == 303
+    resp = await web_client.get(f"/entries/{entry_id}")
+    assert resp.status_code == 404

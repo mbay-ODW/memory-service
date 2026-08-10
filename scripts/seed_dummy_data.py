@@ -37,7 +37,7 @@ PROJECTS: list[dict] = [
     },
     {
         "slug": "privat",
-        "name": "Familie Bayram / Privat",
+        "name": "Familie / Privat",
         "sensitivity_level": "mittel",
         "subtopics": [],
     },

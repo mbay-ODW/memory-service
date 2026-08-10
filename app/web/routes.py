@@ -17,11 +17,14 @@ from app.db.base import get_session
 from app.db.models import Project, Source, Subtopic
 from app.db.repository import (
     NotFoundError,
+    collect_descendant_ids,
+    find_subtopic_by_path,
     get_all_subtopics_for_project,
     get_project_by_slug,
     get_subtopic_path_parts,
 )
 from app.services import entries as entries_service
+from app.services import projects as projects_service
 from app.services import search as search_service
 from app.services.git_store import get_git_store
 
@@ -64,9 +67,13 @@ async def _project_and_path_for_entry(session: AsyncSession, entry) -> tuple[Pro
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, session: AsyncSession = Depends(get_session)):
     projects = list((await session.execute(select(Project).order_by(Project.name))).scalars())
+    # 5 projects today -- a query per card is fine at this scale, no need to batch.
+    project_stats = {p.id: await projects_service.get_project_stats(session, p) for p in projects}
     open_entries = await entries_service.list_open(session)
     return templates.TemplateResponse(
-        request, "dashboard.html", {"projects": projects, "open_entries": open_entries}
+        request,
+        "dashboard.html",
+        {"projects": projects, "project_stats": project_stats, "open_entries": open_entries},
     )
 
 
@@ -76,9 +83,96 @@ async def search_page(request: Request, q: str = "", session: AsyncSession = Dep
     return templates.TemplateResponse(request, "search.html", {"query": q, "results": results})
 
 
+# NOTE ON ORDERING: /projects/new and /projects/{project_slug}/edit + /delete MUST be
+# registered before the catch-all GET /projects/{project_slug}/{subtopic_path:path} below --
+# Starlette matches routes in registration order, not by specificity, so a later-registered
+# "/edit" would otherwise be swallowed by the catch-all as subtopic_path="edit".
+
+
+@router.get("/projects/new", response_class=HTMLResponse)
+async def new_project_form(request: Request):
+    return templates.TemplateResponse(request, "project_edit.html", {"mode": "new", "project": None, "error": None})
+
+
+@router.post("/projects/new")
+async def create_project_route(
+    request: Request,
+    name: str = Form(...),
+    sensitivity_level: str = Form(...),
+    description: str = Form(""),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        project = await projects_service.create_project(
+            session, name=name, sensitivity_level=sensitivity_level, description=description
+        )
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            request,
+            "project_edit.html",
+            {"mode": "new", "project": None, "error": str(exc)},
+            status_code=409,
+        )
+    return RedirectResponse(f"/projects/{project.slug}", status_code=303)
+
+
 @router.get("/projects/{project_slug}", response_class=HTMLResponse)
 async def project_view(request: Request, project_slug: str, session: AsyncSession = Depends(get_session)):
     return await _render_project_page(request, session, project_slug, subtopic_path=None)
+
+
+@router.get("/projects/{project_slug}/edit", response_class=HTMLResponse)
+async def edit_project_form(request: Request, project_slug: str, session: AsyncSession = Depends(get_session)):
+    try:
+        project = await get_project_by_slug(session, project_slug)
+    except NotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    stats = await projects_service.get_project_stats(session, project)
+    return templates.TemplateResponse(
+        request, "project_edit.html", {"mode": "edit", "project": project, "stats": stats, "error": None}
+    )
+
+
+@router.post("/projects/{project_slug}/edit")
+async def update_project_route(
+    request: Request,
+    project_slug: str,
+    name: str = Form(...),
+    description: str = Form(""),
+    session: AsyncSession = Depends(get_session),
+):
+    project = await projects_service.rename_project(
+        session, project_slug=project_slug, name=name, description=description
+    )
+    return RedirectResponse(f"/projects/{project.slug}", status_code=303)
+
+
+@router.post("/projects/{project_slug}/delete")
+async def delete_project_route(
+    request: Request,
+    project_slug: str,
+    confirm_slug: str = Form(...),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        project = await get_project_by_slug(session, project_slug)
+    except NotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    if confirm_slug != project.slug:
+        stats = await projects_service.get_project_stats(session, project)
+        return templates.TemplateResponse(
+            request,
+            "project_edit.html",
+            {
+                "mode": "edit",
+                "project": project,
+                "stats": stats,
+                "error": f"Bestätigung stimmt nicht überein (erwartet: {project.slug})",
+            },
+            status_code=409,
+        )
+    await projects_service.delete_project(session, project_slug=project_slug, actor=web_actor(request))
+    return RedirectResponse("/", status_code=303)
 
 
 @router.get("/projects/{project_slug}/{subtopic_path:path}", response_class=HTMLResponse)
@@ -96,11 +190,110 @@ async def _render_project_page(request: Request, session: AsyncSession, project_
         raise HTTPException(404, str(exc)) from exc
     all_subtopics = await get_all_subtopics_for_project(session, project)
     tree = _build_tree(all_subtopics)
+    stats_map = await projects_service.get_subtopic_stats_map(session, project)
+
+    # scope stats come straight from the entries list already fetched for this exact scope
+    # (project-wide or subtopic+descendants) -- no extra query needed for entry_count/char_count.
+    if subtopic_path:
+        scoped_subtopic = await find_subtopic_by_path(session, project, subtopic_path)
+        subtopic_count = len(collect_descendant_ids(all_subtopics, scoped_subtopic.id)) - 1
+    else:
+        subtopic_count = len(all_subtopics)
+    stats = {
+        "entry_count": len(entries),
+        "char_count": sum(len(e.body_markdown) for e in entries),
+        "subtopic_count": subtopic_count,
+    }
+
     return templates.TemplateResponse(
         request,
         "project.html",
-        {"project": project, "tree": tree, "entries": entries, "subtopic_path": subtopic_path},
+        {
+            "project": project,
+            "tree": tree,
+            "entries": entries,
+            "subtopic_path": subtopic_path,
+            "stats": stats,
+            "stats_map": stats_map,
+        },
     )
+
+
+@router.get("/subtopics/{subtopic_id}/edit", response_class=HTMLResponse)
+async def edit_subtopic_form(request: Request, subtopic_id: UUID, session: AsyncSession = Depends(get_session)):
+    subtopic = await session.get(Subtopic, subtopic_id)
+    if subtopic is None:
+        raise HTTPException(404, "unknown subtopic")
+    project = await session.get(Project, subtopic.project_id)
+    subtopic_path = "/".join((await get_subtopic_path_parts(session, subtopic))[1:])
+    all_subtopics = await get_all_subtopics_for_project(session, project)
+    descendant_count = len(collect_descendant_ids(all_subtopics, subtopic.id)) - 1
+    stats_map = await projects_service.get_subtopic_stats_map(session, project)
+    entry_count = stats_map.get(subtopic.id, {"entry_count": 0})["entry_count"]
+    return templates.TemplateResponse(
+        request,
+        "subtopic_edit.html",
+        {
+            "project": project,
+            "subtopic": subtopic,
+            "subtopic_path": subtopic_path,
+            "descendant_count": descendant_count,
+            "entry_count": entry_count,
+            "error": None,
+        },
+    )
+
+
+@router.post("/subtopics/{subtopic_id}/edit")
+async def update_subtopic_route(
+    request: Request, subtopic_id: UUID, name: str = Form(...), session: AsyncSession = Depends(get_session)
+):
+    try:
+        subtopic = await projects_service.rename_subtopic(session, subtopic_id=subtopic_id, name=name)
+    except NotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    project = await session.get(Project, subtopic.project_id)
+    subtopic_path = "/".join((await get_subtopic_path_parts(session, subtopic))[1:])
+    return RedirectResponse(f"/projects/{project.slug}/{subtopic_path}", status_code=303)
+
+
+@router.post("/subtopics/{subtopic_id}/delete")
+async def delete_subtopic_route(
+    request: Request, subtopic_id: UUID, confirm_slug: str = Form(...), session: AsyncSession = Depends(get_session)
+):
+    subtopic = await session.get(Subtopic, subtopic_id)
+    if subtopic is None:
+        raise HTTPException(404, "unknown subtopic")
+    project = await session.get(Project, subtopic.project_id)
+
+    if confirm_slug != subtopic.slug:
+        subtopic_path = "/".join((await get_subtopic_path_parts(session, subtopic))[1:])
+        all_subtopics = await get_all_subtopics_for_project(session, project)
+        descendant_count = len(collect_descendant_ids(all_subtopics, subtopic.id)) - 1
+        stats_map = await projects_service.get_subtopic_stats_map(session, project)
+        entry_count = stats_map.get(subtopic.id, {"entry_count": 0})["entry_count"]
+        return templates.TemplateResponse(
+            request,
+            "subtopic_edit.html",
+            {
+                "project": project,
+                "subtopic": subtopic,
+                "subtopic_path": subtopic_path,
+                "descendant_count": descendant_count,
+                "entry_count": entry_count,
+                "error": f"Bestätigung stimmt nicht überein (erwartet: {subtopic.slug})",
+            },
+            status_code=409,
+        )
+
+    parent_id = subtopic.parent_subtopic_id
+    await projects_service.delete_subtopic(session, subtopic_id=subtopic_id, actor=web_actor(request))
+    if parent_id:
+        parent = await session.get(Subtopic, parent_id)
+        redirect_path = f"/projects/{project.slug}/{'/'.join((await get_subtopic_path_parts(session, parent))[1:])}"
+    else:
+        redirect_path = f"/projects/{project.slug}"
+    return RedirectResponse(redirect_path, status_code=303)
 
 
 @router.get("/entries/new", response_class=HTMLResponse)

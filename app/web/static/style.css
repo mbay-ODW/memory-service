@@ -150,7 +150,7 @@ h1:first-child { margin-top: 0; }
 .markdown-body code { background: var(--surface); padding: 0.1rem 0.3rem; border-radius: 4px; }
 
 form label { display: block; margin-bottom: 1rem; font-size: 0.85rem; color: var(--muted); }
-form input[type="text"], form select {
+form input[type="text"], form select, form textarea {
   display: block;
   width: 100%;
   margin-top: 0.3rem;
@@ -160,9 +160,30 @@ form input[type="text"], form select {
   background: var(--bg);
   color: var(--fg);
   font-size: 0.95rem;
+  font-family: inherit;
 }
 .form-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
 .error { background: #fee2e2; color: #991b1b; padding: 0.6rem 0.8rem; border-radius: 6px; }
+
+.stats-line { color: var(--muted); font-size: 0.85rem; margin: 0.15rem 0 0; }
+.project-description { color: var(--fg); margin: 0.25rem 0 0.5rem; max-width: 60ch; }
+.entries-header-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+
+.tree li { position: relative; }
+.tree-count { color: var(--muted); font-size: 0.78rem; }
+.tree-edit { color: var(--muted); font-size: 0.78rem; margin-left: 0.2rem; opacity: 0; }
+.tree li:hover .tree-edit { opacity: 1; }
+
+.danger-zone {
+  margin-top: 2rem;
+  padding: 1rem;
+  border: 1px solid #991b1b;
+  border-radius: 8px;
+}
+.danger-zone h2 { margin-top: 0; font-size: 1.05rem; color: #991b1b; }
+.danger-form { display: flex; align-items: flex-end; gap: 0.75rem; }
+.danger-form label { flex: 1; margin-bottom: 0; }
+.button-danger { background: #991b1b; color: #ffffff; border-color: #991b1b; }
 
 .diff-wrapper { overflow-x: auto; font-size: 0.82rem; }
 table.diff { border-collapse: collapse; width: 100%; }

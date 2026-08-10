@@ -8,8 +8,19 @@ from app.core.security import current_actor
 from app.db.base import get_session_factory
 from app.mcp.server import mcp
 from app.services import entries as entries_service
+from app.services import projects as projects_service
 from app.services import search as search_service
 from app.services import sources as sources_service
+
+
+def _project_summary(project) -> dict:
+    return {
+        "id": str(project.id),
+        "slug": project.slug,
+        "name": project.name,
+        "sensitivity_level": project.sensitivity_level,
+        "description": project.description,
+    }
 
 
 def _entry_summary(entry) -> dict:
@@ -122,3 +133,19 @@ async def memory_check_sources(source_type: str, source_refs: list[str]) -> dict
     edits to an already-logged item under the same ref."""
     async with get_session_factory()() as session:
         return await sources_service.check_sources(session, source_type, source_refs)
+
+
+@mcp.tool()
+async def memory_create_project(
+    name: str, sensitivity_level: str, description: str | None = None
+) -> dict:
+    """Create a new project (slug is derived from `name`). `sensitivity_level` must be one of
+    "niedrig", "mittel", "hoch". This is the ONLY project-management operation exposed over
+    MCP -- renaming and deleting a project are web-UI-only, human-confirmed actions, not
+    something to do unprompted mid-task. Use this when a note genuinely doesn't fit any
+    existing project (check with memory_search / memory_get first)."""
+    async with get_session_factory()() as session:
+        project = await projects_service.create_project(
+            session, name=name, sensitivity_level=sensitivity_level, description=description
+        )
+        return _project_summary(project)

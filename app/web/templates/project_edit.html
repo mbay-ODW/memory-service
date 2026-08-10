@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ "Neues Projekt" if mode == "new" else "Bearbeiten: " + project.name }} — memory-service{% endblock %}
+{% block content %}
+  <nav class="breadcrumb">
+    <a href="/">Projekte</a>
+    {% if project %} / <a href="/projects/{{ project.slug }}">{{ project.name }}</a>{% endif %}
+  </nav>
+
+  <h1>{{ "Neues Projekt" if mode == "new" else "Projekt bearbeiten" }}</h1>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <form method="post" action="{{ '/projects/new' if mode == 'new' else '/projects/' + project.slug + '/edit' }}">
+    <label>Name
+      <input type="text" name="name" value="{{ project.name if project else '' }}" required>
+    </label>
+
+    {% if mode == "new" %}
+      <label>Sensibilität
+        <select name="sensitivity_level" required>
+          <option value="" disabled selected>-- auswählen --</option>
+          <option value="niedrig">niedrig</option>
+          <option value="mittel">mittel</option>
+          <option value="hoch">hoch</option>
+        </select>
+      </label>
+    {% else %}
+      <label>Sensibilität <input type="text" value="{{ project.sensitivity_level }}" disabled></label>
+    {% endif %}
+
+    <label>Beschreibung / Kontext
+      <textarea name="description" rows="4">{{ project.description if project and project.description else '' }}</textarea>
+    </label>
+
+    <div class="form-actions">
+      <button type="submit" class="button button-primary">Speichern</button>
+      {% if project %}<a class="button" href="/projects/{{ project.slug }}">Abbrechen</a>{% endif %}
+    </div>
+  </form>
+
+  {% if mode == "edit" %}
+    <section class="danger-zone">
+      <h2>Danger Zone</h2>
+      <p>
+        Löschen entfernt <strong>{{ stats.subtopic_count }} Unterthemen</strong> und
+        <strong>{{ stats.entry_count }} Einträge</strong> unwiderruflich aus der Datenbank.
+        Die Git-Historie bleibt erhalten.
+      </p>
+      <form method="post" action="/projects/{{ project.slug }}/delete" class="danger-form">
+        <label>Zum Bestätigen <code>{{ project.slug }}</code> eingeben
+          <input type="text" name="confirm_slug" placeholder="{{ project.slug }}" required>
+        </label>
+        <button type="submit" class="button button-danger">Projekt löschen</button>
+      </form>
+    </section>
+  {% endif %}
+{% endblock %}
