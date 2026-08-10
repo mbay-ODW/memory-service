@@ -301,3 +301,27 @@ async def get_history(session: AsyncSession, entry_id, limit: int = 20) -> list[
         .limit(limit)
     )
     return list((await session.execute(stmt)).scalars())
+
+
+async def delete_entry(session: AsyncSession, *, entry_id, actor: str) -> None:
+    """Hard delete: the DB row and its git file are both removed, the git file in the same
+    commit sequence every other write uses (DB change flushed, then git, roll back the DB on
+    git failure). Git history remains the recovery path afterward -- there's no undo at the
+    DB/git level, only "go look at the commit before this one." """
+    entry = await get_entry_by_id(session, entry_id)
+    subtopic = await session.get(Subtopic, entry.subtopic_id)
+    path_parts = await get_subtopic_path_parts(session, subtopic)
+    relative_path = "/".join([*path_parts, entry.slug]) + ".md"
+
+    await session.delete(entry)
+    await session.flush()
+
+    message = f"delete entry: {'/'.join(path_parts)}/{entry.slug}\n\nby {actor}"
+    try:
+        async with git_write_lock:
+            await asyncio.to_thread(get_git_store().remove_path_and_commit, relative_path, message, actor)
+    except Exception:
+        await session.rollback()
+        raise
+
+    await session.commit()

@@ -129,3 +129,27 @@ async def test_memory_create_project_rejects_duplicate(mcp_client):
         await mcp_client.call_tool(
             "memory_create_project", {"name": "Doppeltes MCP Projekt", "sensitivity_level": "niedrig"}
         )
+
+
+async def test_memory_delete_entry(mcp_client):
+    created = await mcp_client.call_tool(
+        "memory_upsert",
+        {
+            "project": "mcptest",
+            "subtopic": "topic-x",
+            "title": "Zu Loeschender MCP Eintrag",
+            "body_markdown": "...",
+        },
+    )
+    entry_id = created.data["id"]
+
+    deleted = await mcp_client.call_tool("memory_delete_entry", {"entry_id": entry_id})
+    assert deleted.data == {"deleted": True, "id": entry_id}
+
+    with pytest.raises(Exception):
+        await mcp_client.call_tool("memory_history", {"entry_id": entry_id})
+
+
+async def test_memory_delete_entry_rejects_invalid_uuid(mcp_client):
+    with pytest.raises(Exception):
+        await mcp_client.call_tool("memory_delete_entry", {"entry_id": "not-a-uuid"})

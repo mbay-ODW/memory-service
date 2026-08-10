@@ -127,6 +127,22 @@ async def memory_history(entry_id: str, limit: int = 20) -> list[dict]:
 
 
 @mcp.tool()
+async def memory_delete_entry(entry_id: str) -> dict:
+    """Permanently delete one entry (its DB row and its git file, in one commit). Git history
+    remains the recovery path afterward -- there's no soft-delete/archive state yet, so use
+    this for entries created by mistake or genuinely no longer wanted, not for "this is
+    outdated but still worth a record of" (edit the entry instead)."""
+    try:
+        entry_uuid = uuid.UUID(entry_id)
+    except ValueError as exc:
+        raise ValueError(f"invalid entry_id (must be a UUID): {entry_id!r}") from exc
+    async with get_session_factory()() as session:
+        actor = current_actor()
+        await entries_service.delete_entry(session, entry_id=entry_uuid, actor=actor)
+        return {"deleted": True, "id": entry_id}
+
+
+@mcp.tool()
 async def memory_check_sources(source_type: str, source_refs: list[str]) -> dict[str, bool]:
     """Batch dedup check for daily sync tasks: which of these source refs (e.g. mail message
     ids) are already logged in memory? Only detects refs seen before -- it does NOT detect

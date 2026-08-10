@@ -153,3 +153,24 @@ async def test_update_entry_rejects_slug_collision(db_session, git_repo_path, sa
             body_markdown="...",
             actor="user:murat",
         )
+
+
+async def test_delete_entry_removes_db_row_and_git_file(db_session, git_repo_path, sample_project):
+    entry = await entries_service.upsert_entry(
+        db_session,
+        project_slug="testproj",
+        subtopic_path="topic-a",
+        title="Zu Loeschender Eintrag",
+        body_markdown="Inhalt.",
+        actor="claude",
+    )
+    git_path = get_git_store().repo_path / "testproj/topic-a/zu-loeschender-eintrag.md"
+    assert git_path.exists()
+
+    await entries_service.delete_entry(db_session, entry_id=entry.id, actor="tester")
+
+    from app.db.repository import NotFoundError
+
+    with pytest.raises(NotFoundError):
+        await entries_service.get_entry_by_id(db_session, entry.id)
+    assert not git_path.exists()
