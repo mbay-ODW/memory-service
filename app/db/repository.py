@@ -4,6 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Project, Subtopic
 
+# Every entry belongs to a subtopic -- there's no "no subtopic, directly under the project"
+# state in this schema. Callers (MCP clients especially) legitimately have entries that don't
+# fit under anything more specific, so an empty/blank subtopic path falls back to this fixed
+# bucket instead of being rejected.
+DEFAULT_SUBTOPIC_SLUG = "allgemein"
+
 
 async def get_all_subtopics_for_project(session: AsyncSession, project: Project) -> list[Subtopic]:
     return list(
@@ -41,11 +47,15 @@ async def get_project_by_slug(session: AsyncSession, slug: str) -> Project:
 
 async def resolve_or_create_subtopic_path(session: AsyncSession, project: Project, path: str) -> Subtopic:
     """Walk/create a '/'-separated subtopic path (e.g. 'kunde-mueller/vorgang-2026-08'),
-    auto-creating any missing level. Segments are slugified; the display name of a newly
+    auto-creating any missing level. An empty/blank path falls back to DEFAULT_SUBTOPIC_SLUG
+    (see above) instead of raising. Segments are slugified; the display name of a newly
     created level is derived from the segment (title-cased) since callers only pass slugs."""
+    normalized_path = (path or "").strip("/").strip()
+    segments = normalized_path.split("/") if normalized_path else [DEFAULT_SUBTOPIC_SLUG]
+
     parent: Subtopic | None = None
     subtopic: Subtopic | None = None
-    for raw_segment in path.strip("/").split("/"):
+    for raw_segment in segments:
         segment = slugify(raw_segment)
         if not segment:
             continue

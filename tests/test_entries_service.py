@@ -174,3 +174,31 @@ async def test_delete_entry_removes_db_row_and_git_file(db_session, git_repo_pat
     with pytest.raises(NotFoundError):
         await entries_service.get_entry_by_id(db_session, entry.id)
     assert not git_path.exists()
+
+
+@pytest.mark.parametrize("empty_subtopic", ["", "  ", "/", "///", None])
+async def test_upsert_entry_with_empty_subtopic_falls_back_to_allgemein(
+    db_session, git_repo_path, sample_project, empty_subtopic
+):
+    entry = await entries_service.upsert_entry(
+        db_session,
+        project_slug="testproj",
+        subtopic_path=empty_subtopic,
+        title="Eintrag ohne Unterthema",
+        body_markdown="...",
+        actor="claude",
+    )
+    found = await entries_service.get_entries(db_session, project_slug="testproj", subtopic_path="allgemein")
+    assert entry.id in {e.id for e in found}
+    assert (get_git_store().repo_path / "testproj/allgemein/eintrag-ohne-unterthema.md").exists()
+
+
+async def test_upsert_entry_empty_subtopic_is_idempotent(db_session, git_repo_path, sample_project):
+    first = await entries_service.upsert_entry(
+        db_session, project_slug="testproj", subtopic_path="", title="Wiederholt", body_markdown="v1", actor="claude"
+    )
+    second = await entries_service.upsert_entry(
+        db_session, project_slug="testproj", subtopic_path="", title="Wiederholt", body_markdown="v2", actor="claude"
+    )
+    assert first.id == second.id
+    assert second.body_markdown == "v2"
