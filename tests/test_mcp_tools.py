@@ -43,10 +43,12 @@ async def test_memory_upsert_get_history_and_check_sources(mcp_client):
     )
     assert created.data["title"] == "MCP Test Entry"
     assert created.data["tags"] == ["mcp"]
+    assert created.data["subtopic"] == "topic-x"
     entry_id = created.data["id"]
 
     got = await mcp_client.call_tool("memory_get", {"project": "mcptest", "subtopic": "topic-x"})
-    assert any(e["id"] == entry_id for e in got.data)
+    match = next(e for e in got.data if e["id"] == entry_id)
+    assert match["subtopic"] == "topic-x"
 
     history = await mcp_client.call_tool("memory_history", {"entry_id": entry_id})
     assert len(history.data) == 1
@@ -153,3 +155,53 @@ async def test_memory_delete_entry(mcp_client):
 async def test_memory_delete_entry_rejects_invalid_uuid(mcp_client):
     with pytest.raises(Exception):
         await mcp_client.call_tool("memory_delete_entry", {"entry_id": "not-a-uuid"})
+
+
+async def test_updating_via_the_returned_subtopic_does_not_duplicate(mcp_client):
+    """Regression test for the exact bug reported live: memory_get/memory_search didn't expose
+    `subtopic`, so a caller updating an existing entry had to guess it -- and a wrong guess
+    silently created a duplicate under the guessed path instead of erroring."""
+    created = await mcp_client.call_tool(
+        "memory_upsert",
+        {
+            "project": "mcptest",
+            "subtopic": "kunde-mueller/vorgang-2026-08",
+            "title": "Bug-Report Regressionstest",
+            "body_markdown": "v1",
+        },
+    )
+    entry_id = created.data["id"]
+
+    # a caller that READS the entry and passes its exact subtopic back must update in place
+    found = await mcp_client.call_tool("memory_get", {"project": "mcptest"})
+    match = next(e for e in found.data if e["id"] == entry_id)
+    assert match["subtopic"] == "kunde-mueller/vorgang-2026-08"
+
+    updated = await mcp_client.call_tool(
+        "memory_upsert",
+        {
+            "project": "mcptest",
+            "subtopic": match["subtopic"],
+            "title": "Bug-Report Regressionstest",
+            "body_markdown": "v2",
+        },
+    )
+    assert updated.data["id"] == entry_id  # same entry, not a new one
+    assert updated.data["body_markdown"] == "v2"
+
+    history = await mcp_client.call_tool("memory_history", {"entry_id": entry_id})
+    assert len(history.data) == 2  # create + update, one entry throughout
+
+    # by contrast, GUESSING a wrong/empty subtopic is exactly what created duplicates in
+    # production -- confirm that still lands somewhere else (documents the actual footgun,
+    # not a bug in this fix: memory_upsert can't know the caller "meant" the same entry).
+    guessed = await mcp_client.call_tool(
+        "memory_upsert",
+        {
+            "project": "mcptest",
+            "subtopic": "",
+            "title": "Bug-Report Regressionstest",
+            "body_markdown": "guessed wrong",
+        },
+    )
+    assert guessed.data["id"] != entry_id

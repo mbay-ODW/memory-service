@@ -3,6 +3,27 @@
 Non-obvious gotchas hit while building this repo. Read before touching app/db, app/services,
 or tests/conftest.py.
 
+## A read tool that omits a field needed to construct the matching write call WILL cause silent duplicates
+
+`memory_get`/`memory_search`/`memory_list_open` originally returned entries without their
+`subtopic` path, even though `memory_upsert` is keyed by `(subtopic, title)`. This wasn't
+caught by any test because every test *already knew* the subtopic it had written -- nothing
+exercised the actual failure mode: a caller reading an entry back, not knowing its subtopic,
+and having to guess when updating it. A wrong guess doesn't error (there's no way for
+`upsert_entry` to know the caller "meant" an existing entry under a different path) -- it
+silently creates a new entry under the guessed path. This produced real duplicate entries in
+production (confirmed: 5 pairs in the `geb` project) before anyone noticed, because each
+individual write looked completely successful.
+
+**The general lesson: for any tool whose write path is keyed by more than the primary id,
+every read path MUST return the full key, not just the id.** Don't assume a caller can
+reconstruct a compound key from context — across MCP tool calls in particular, the caller has
+no state except what a previous response handed back. When adding a new key field to a
+write operation, grep for every read/list function returning that entity and add the field
+there too, in the same change.
+
+## TrueNAS deploy: the Traefik rule template assumes "no web UI of its own" — this service breaks that assumption
+
 ## TrueNAS deploy: the Traefik rule template assumes "no web UI of its own" — this service breaks that assumption
 
 Every other self-hosted MCP server here (signal-mcp, instagram-*, mail-mcp, ...) is a pure

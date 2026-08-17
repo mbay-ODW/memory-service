@@ -93,9 +93,9 @@ the web UI, or the one `memory_create_project` MCP tool).
 
 | Tool | Purpose |
 |---|---|
-| `memory_search` | Full-text + semantic search, optionally scoped to a project/subtopic |
-| `memory_get` | Current entries for a project or subtopic (call this before answering) |
-| `memory_upsert` | Create or update an entry, identified by (subtopic, title) |
+| `memory_search` | Full-text + semantic search, optionally scoped to a project/subtopic. Every result includes its exact `subtopic` path. |
+| `memory_get` | Current entries for a project or subtopic (call this before answering). Every result includes its exact `subtopic` path. |
+| `memory_upsert` | Create or update an entry, identified by (subtopic, title) -- pass the `subtopic` from a prior `memory_get`/`memory_search` result to update it in place; guessing instead creates a separate entry, silently |
 | `memory_list_open` | Entries flagged as needing follow-up |
 | `memory_history` | Version history for one entry |
 | `memory_delete_entry` | Permanently delete one entry (DB row + git file, one commit) |

@@ -202,3 +202,21 @@ async def test_upsert_entry_empty_subtopic_is_idempotent(db_session, git_repo_pa
     )
     assert first.id == second.id
     assert second.body_markdown == "v2"
+
+
+async def test_get_subtopic_paths_returns_full_path_per_entry(db_session, git_repo_path, sample_project):
+    nested = await entries_service.upsert_entry(
+        db_session,
+        project_slug="testproj",
+        subtopic_path="kunde-mueller/vorgang-2026-08",
+        title="Verschachtelt",
+        body_markdown="...",
+        actor="claude",
+    )
+    root = await entries_service.upsert_entry(
+        db_session, project_slug="testproj", subtopic_path="", title="Wurzel", body_markdown="...", actor="claude"
+    )
+
+    paths = await entries_service.get_subtopic_paths(db_session, [nested, root])
+    assert paths[nested.id] == "kunde-mueller/vorgang-2026-08"
+    assert paths[root.id] == "allgemein"

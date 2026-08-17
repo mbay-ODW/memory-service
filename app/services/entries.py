@@ -325,3 +325,22 @@ async def delete_entry(session: AsyncSession, *, entry_id, actor: str) -> None:
         raise
 
     await session.commit()
+
+
+async def get_subtopic_paths(session: AsyncSession, entries: list[Entry]) -> dict:
+    """entry.id -> its subtopic's full path string (project slug excluded, e.g.
+    "kunde-mueller/vorgang-2026-08"), for annotating MCP read output. Without this, a caller
+    can't know the exact subtopic an existing entry lives under and has to guess when calling
+    upsert_entry to update it -- a wrong guess doesn't error, it silently creates a duplicate
+    entry under the guessed path instead of matching the real one. Memoized per subtopic_id so
+    a shared subtopic's ancestor chain is only walked once even across many entries."""
+    cache: dict = {}
+    result: dict = {}
+    for entry in entries:
+        sid = entry.subtopic_id
+        if sid not in cache:
+            subtopic = await session.get(Subtopic, sid)
+            path_parts = await get_subtopic_path_parts(session, subtopic)
+            cache[sid] = "/".join(path_parts[1:])
+        result[entry.id] = cache[sid]
+    return result

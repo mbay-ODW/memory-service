@@ -23,11 +23,15 @@ def _project_summary(project) -> dict:
     }
 
 
-def _entry_summary(entry) -> dict:
+def _entry_summary(entry, subtopic_path: str) -> dict:
     return {
         "id": str(entry.id),
         "title": entry.title,
         "slug": entry.slug,
+        # the exact path to pass back into memory_upsert's `subtopic` param to update THIS
+        # entry -- without it, a caller has no way to know where an existing entry actually
+        # lives, and a wrong guess doesn't error, it silently creates a duplicate elsewhere.
+        "subtopic": subtopic_path,
         "status": entry.status,
         "follow_up_status": entry.follow_up_status,
         "tags": [t.name for t in entry.tags],
@@ -36,8 +40,18 @@ def _entry_summary(entry) -> dict:
     }
 
 
-def _entry_detail(entry) -> dict:
-    return {**_entry_summary(entry), "body_markdown": entry.body_markdown}
+def _entry_detail(entry, subtopic_path: str) -> dict:
+    return {**_entry_summary(entry, subtopic_path), "body_markdown": entry.body_markdown}
+
+
+async def _entry_summaries(session, entries: list) -> list[dict]:
+    paths = await entries_service.get_subtopic_paths(session, entries)
+    return [_entry_summary(e, paths[e.id]) for e in entries]
+
+
+async def _entry_details(session, entries: list) -> list[dict]:
+    paths = await entries_service.get_subtopic_paths(session, entries)
+    return [_entry_detail(e, paths[e.id]) for e in entries]
 
 
 def _version_summary(version) -> dict:
@@ -54,21 +68,27 @@ async def memory_search(
     query: str, project: str | None = None, subtopic: str | None = None, limit: int = 10
 ) -> list[dict]:
     """Full-text + semantic search across memory entries. Scope to a project (and optionally
-    a subtopic within it) to narrow results; omit both to search everything."""
+    a subtopic within it) to narrow results; omit both to search everything. Each result
+    includes its exact `subtopic` path -- pass that back verbatim into memory_upsert's
+    `subtopic` param to update this entry. Guessing the subtopic instead doesn't error, it
+    silently creates a duplicate entry under the guessed path."""
     async with get_session_factory()() as session:
         results = await search_service.search(
             session, query=query, project_slug=project, subtopic_path=subtopic, limit=limit
         )
-        return [_entry_summary(e) for e in results]
+        return await _entry_summaries(session, results)
 
 
 @mcp.tool()
 async def memory_get(project: str, subtopic: str | None = None) -> list[dict]:
     """Current ('aktuell') entries for a project, or for one subtopic (and its nested
-    children) within it. Call this at the start of a task before researching or answering."""
+    children) within it. Call this at the start of a task before researching or answering.
+    Each result includes its exact `subtopic` path -- pass that back verbatim into
+    memory_upsert's `subtopic` param to update this entry. Guessing the subtopic instead
+    doesn't error, it silently creates a duplicate entry under the guessed path."""
     async with get_session_factory()() as session:
         results = await entries_service.get_entries(session, project_slug=project, subtopic_path=subtopic)
-        return [_entry_detail(e) for e in results]
+        return await _entry_details(session, results)
 
 
 @mcp.tool()
@@ -81,12 +101,17 @@ async def memory_upsert(
     tags: list[str] | None = None,
     follow_up_status: str | None = None,
 ) -> dict:
-    """Create or update a memory entry, identified by (subtopic, title) within a project.
-    Missing subtopic levels (e.g. 'kunde-mueller/vorgang-2026-08') are auto-created. Writes go
-    to Postgres AND the internal git history in the same call. `sources` is a list of
-    {"type": "mail"|"whatsapp"|"signal"|"paperless"|"nextcloud"|"hero", "ref": "..."}, used for
+    """Create or update a memory entry, identified by (subtopic, title) within a project. To
+    update an entry you already found via memory_get/memory_search, pass its exact `subtopic`
+    value from that result -- a different or empty subtopic doesn't error, it creates a
+    separate new entry instead of updating the one you meant. Missing subtopic levels (e.g.
+    'kunde-mueller/vorgang-2026-08') are auto-created for genuinely new entries; an empty
+    subtopic falls back to a generic "allgemein" bucket. Writes go to Postgres AND the internal
+    git history in the same call. `sources` is a list of {"type":
+    "mail"|"whatsapp"|"signal"|"paperless"|"nextcloud"|"hero", "ref": "..."}, used for
     provenance and by memory_check_sources for daily-sync dedup. `follow_up_status` is one of
-    null (don't change), "offen", "wartet", or "none" (clear it)."""
+    null (don't change), "offen", "wartet", or "none" (clear it). The returned entry's
+    `subtopic` field confirms exactly where it landed."""
     source_pairs = [(s["type"], s["ref"]) for s in (sources or [])]
     async with get_session_factory()() as session:
         actor = current_actor()
@@ -101,7 +126,7 @@ async def memory_upsert(
             tags=tags,
             follow_up_status=follow_up_status,
         )
-        return _entry_detail(entry)
+        return (await _entry_details(session, [entry]))[0]
 
 
 @mcp.tool()
@@ -110,7 +135,7 @@ async def memory_list_open(project: str | None = None) -> list[dict]:
     optionally scoped to one project."""
     async with get_session_factory()() as session:
         results = await entries_service.list_open(session, project_slug=project)
-        return [_entry_summary(e) for e in results]
+        return await _entry_summaries(session, results)
 
 
 @mcp.tool()
