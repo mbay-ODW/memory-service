@@ -31,6 +31,22 @@
     </div>
   {% endif %}
 
+  {% if related_entries %}
+    <div class="related-entries">
+      <h3>Verknüpfte Einträge</h3>
+      <ul>
+        {% for rel in related_entries %}
+          <li>
+            <span class="tag">{{ rel.relation_type }}</span>
+            <a href="/entries/{{ rel.entry_id }}">{{ rel.title }}</a>
+            <span class="meta-line">({{ rel.subtopic }}, {{ rel.direction }})</span>
+            {% if rel.note %}<span class="meta-line">– {{ rel.note }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
   <article class="markdown-body">
     {{ rendered_html|safe }}
   </article>

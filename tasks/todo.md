@@ -71,3 +71,18 @@ Connector URL: `https://memory-service.your-domain.example/mcp`
 ## Not started (needs separate go-ahead)
 Phase 6 (Cowork pilot wiring: connector + Standing Instruction + Scheduled Task for Interne
 IT), Phase 7 (RLS hardening, audit logging, before Privat/GEB/Steuer rollout).
+
+## Feature: entry relations (done locally, 2026-08-25)
+- [x] Migration `0003_entry_relations` (`entry_relations` table, run + verified locally)
+- [x] `app/db/models.py` — `Relation` model, `RELATION_TYPES`
+- [x] `app/services/relations.py` — `link_entries`/`unlink_entries`/`get_related_entries`
+- [x] `app/mcp/tools.py` — `memory_link_entries`/`memory_unlink_entries`/`memory_get_related`
+- [x] Web UI: read-only "Verknüpfte Einträge" section on the entry page
+- [x] Tests: `test_relations_service.py` (8), `test_mcp_tools.py` (+4), `test_web_ui.py` (+1)
+      — full suite 60/60 green
+- [x] README MCP tools table + hygiene grep sweep (clean)
+- [ ] Not shipped to TrueNAS yet — same build → push → pull → migrate → redeploy sequence as
+      every prior feature, re-passing `env` on `updateLocalStack`
+- [ ] Still open: whether to clean up the 5 known `geb` duplicate pairs now via
+      `memory_delete_entry`/`memory_link_entries(same_as)`, or wait for a possible future
+      `memory_merge_entries` tool — Murat hasn't decided yet

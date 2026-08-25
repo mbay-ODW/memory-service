@@ -215,3 +215,43 @@ async def test_rename_and_delete_subtopic_via_ui(web_client):
     assert resp.status_code == 303
     resp = await web_client.get(f"/entries/{entry_id}")
     assert resp.status_code == 404
+
+
+async def test_entry_page_shows_related_entries(web_client):
+    async def create_entry(subtopic, title):
+        resp = await web_client.post(
+            "/entries/new",
+            data={"project": "webtest", "subtopic": subtopic, "title": title, "body_markdown": "..."},
+        )
+        return resp.headers["location"].rsplit("/", 1)[-1]
+
+    a_id = await create_entry("rel-a", "Verknuepfung A")
+    b_id = await create_entry("rel-b", "Verknuepfung B")
+
+    resp = await web_client.get(f"/entries/{a_id}")
+    assert "Verknüpfte Einträge" not in resp.text
+
+    from app.db.base import get_session_factory
+    from app.services import relations as relations_service
+
+    async with get_session_factory()() as session:
+        import uuid
+
+        await relations_service.link_entries(
+            session,
+            from_entry_id=uuid.UUID(a_id),
+            to_entry_id=uuid.UUID(b_id),
+            relation_type="same_as",
+            note="gleicher Kunde",
+            actor="webtest",
+        )
+
+    resp = await web_client.get(f"/entries/{a_id}")
+    assert resp.status_code == 200
+    assert "Verknüpfte Einträge" in resp.text
+    assert "Verknuepfung B" in resp.text
+    assert "same_as" in resp.text
+
+    resp = await web_client.get(f"/entries/{b_id}")
+    assert "Verknuepfung A" in resp.text
+    assert "incoming" in resp.text

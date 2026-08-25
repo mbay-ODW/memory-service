@@ -25,6 +25,7 @@ from app.db.repository import (
 )
 from app.services import entries as entries_service
 from app.services import projects as projects_service
+from app.services import relations as relations_service
 from app.services import search as search_service
 from app.services.git_store import get_git_store
 
@@ -344,6 +345,7 @@ async def entry_view(request: Request, entry_id: UUID, session: AsyncSession = D
     project, subtopic_path = await _project_and_path_for_entry(session, entry)
     rendered_html = md.markdown(entry.body_markdown, extensions=["extra", "sane_lists", "nl2br"])
     sources = (await session.execute(select(Source).where(Source.entry_id == entry.id))).scalars()
+    related_entries = await relations_service.get_related_entries(session, entry.id)
     return templates.TemplateResponse(
         request,
         "entry_view.html",
@@ -353,6 +355,7 @@ async def entry_view(request: Request, entry_id: UUID, session: AsyncSession = D
             "subtopic_path": subtopic_path,
             "rendered_html": rendered_html,
             "sources": list(sources),
+            "related_entries": related_entries,
         },
     )
 

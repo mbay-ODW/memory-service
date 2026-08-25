@@ -25,6 +25,7 @@ SENSITIVITY_LEVELS = ("niedrig", "mittel", "hoch")
 ENTRY_STATUSES = ("aktuell", "veraltet")
 FOLLOW_UP_STATUSES = ("offen", "wartet")
 SOURCE_TYPES = ("mail", "whatsapp", "signal", "paperless", "nextcloud", "hero")
+RELATION_TYPES = ("related_to", "same_as", "follow_up_of", "mentions")
 
 
 def _uuid() -> uuid.UUID:
@@ -163,3 +164,31 @@ class Tag(Base):
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
 
     entries: Mapped[list["Entry"]] = relationship(secondary=entry_tags, back_populates="tags")
+
+
+class Relation(Base):
+    """A direct, typed link from one entry to another (e.g. "these are the same client",
+    filed under two different titles). Postgres-only -- deliberately not mirrored into either
+    entry's git frontmatter, since a link to another entry can go stale if that entry is later
+    renamed or deleted, and this table's own created_at/created_by is audit trail enough
+    without that sync problem. See app/services/relations.py, the only code that touches this
+    table."""
+
+    __tablename__ = "entry_relations"
+    __table_args__ = (
+        UniqueConstraint("from_entry_id", "to_entry_id", "relation_type", name="uq_relations_from_to_type"),
+        CheckConstraint("from_entry_id != to_entry_id", name="ck_relations_no_self_link"),
+        CheckConstraint(f"relation_type IN {RELATION_TYPES}", name="ck_relations_type"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    from_entry_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entries.id", ondelete="CASCADE"), nullable=False
+    )
+    to_entry_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("entries.id", ondelete="CASCADE"), nullable=False
+    )
+    relation_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)

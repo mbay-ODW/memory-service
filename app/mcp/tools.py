@@ -1,4 +1,4 @@
-"""The 6 MCP tools. Every one is a thin wrapper over app/services/* -- no DB or git access
+"""The MCP tools. Every one is a thin wrapper over app/services/* -- no DB or git access
 happens here directly. Each tool opens its own session (MCP tool calls aren't FastAPI routes,
 so there's no request-scoped Depends() session injection)."""
 
@@ -9,6 +9,7 @@ from app.db.base import get_session_factory
 from app.mcp.server import mcp
 from app.services import entries as entries_service
 from app.services import projects as projects_service
+from app.services import relations as relations_service
 from app.services import search as search_service
 from app.services import sources as sources_service
 
@@ -71,7 +72,10 @@ async def memory_search(
     a subtopic within it) to narrow results; omit both to search everything. Each result
     includes its exact `subtopic` path -- pass that back verbatim into memory_upsert's
     `subtopic` param to update this entry. Guessing the subtopic instead doesn't error, it
-    silently creates a duplicate entry under the guessed path."""
+    silently creates a duplicate entry under the guessed path. If a result turns out to be
+    about the same real-world thing as an entry you're about to create (same client under a
+    different title, say), prefer memory_link_entries(..., relation_type="same_as") over
+    creating a second entry."""
     async with get_session_factory()() as session:
         results = await search_service.search(
             session, query=query, project_slug=project, subtopic_path=subtopic, limit=limit
@@ -190,3 +194,63 @@ async def memory_create_project(
             session, name=name, sensitivity_level=sensitivity_level, description=description
         )
         return _project_summary(project)
+
+
+def _parse_entry_id(entry_id: str, param_name: str = "entry_id") -> uuid.UUID:
+    try:
+        return uuid.UUID(entry_id)
+    except ValueError as exc:
+        raise ValueError(f"invalid {param_name} (must be a UUID): {entry_id!r}") from exc
+
+
+@mcp.tool()
+async def memory_link_entries(
+    from_entry_id: str, to_entry_id: str, relation_type: str, note: str | None = None
+) -> dict:
+    """Record a direct link between two entries: "related_to" (generic), "same_as" (these are
+    the same real-world thing, filed under different titles -- the fix for accidental
+    duplicates), "follow_up_of" (from_entry follows up on to_entry), or "mentions" (from_entry
+    references to_entry in passing). Re-linking the same pair with the same relation_type just
+    updates the note, it doesn't create a duplicate link. Both entries must already exist.
+    Prefer this over creating a near-duplicate entry whenever memory_search/memory_get turns up
+    something that's really the same thing under a different title."""
+    async with get_session_factory()() as session:
+        actor = current_actor()
+        relation = await relations_service.link_entries(
+            session,
+            from_entry_id=_parse_entry_id(from_entry_id, "from_entry_id"),
+            to_entry_id=_parse_entry_id(to_entry_id, "to_entry_id"),
+            relation_type=relation_type,
+            note=note,
+            actor=actor,
+        )
+        return {
+            "from_entry_id": str(relation.from_entry_id),
+            "to_entry_id": str(relation.to_entry_id),
+            "relation_type": relation.relation_type,
+            "note": relation.note,
+        }
+
+
+@mcp.tool()
+async def memory_unlink_entries(from_entry_id: str, to_entry_id: str, relation_type: str) -> dict:
+    """Remove a specific link between two entries. Safe to call even if the link doesn't exist
+    (returns {"unlinked": false} rather than erroring)."""
+    async with get_session_factory()() as session:
+        removed = await relations_service.unlink_entries(
+            session,
+            from_entry_id=_parse_entry_id(from_entry_id, "from_entry_id"),
+            to_entry_id=_parse_entry_id(to_entry_id, "to_entry_id"),
+            relation_type=relation_type,
+        )
+        return {"unlinked": removed}
+
+
+@mcp.tool()
+async def memory_get_related(entry_id: str) -> list[dict]:
+    """Every entry directly linked to this one (via memory_link_entries), in either direction,
+    with the relation type, direction ("outgoing" = this entry points at the other one,
+    "incoming" = the other one points at this entry), and any note. Does not follow chains of
+    links (no transitive/multi-hop traversal) -- only direct links to this one entry."""
+    async with get_session_factory()() as session:
+        return await relations_service.get_related_entries(session, _parse_entry_id(entry_id))

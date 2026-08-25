@@ -205,3 +205,76 @@ async def test_updating_via_the_returned_subtopic_does_not_duplicate(mcp_client)
         },
     )
     assert guessed.data["id"] != entry_id
+
+
+async def _create_entry(mcp_client, title, subtopic="topic-x"):
+    created = await mcp_client.call_tool(
+        "memory_upsert",
+        {"project": "mcptest", "subtopic": subtopic, "title": title, "body_markdown": "..."},
+    )
+    return created.data["id"]
+
+
+async def test_memory_link_entries_and_get_related_round_trip(mcp_client):
+    a_id = await _create_entry(mcp_client, "Relations A")
+    b_id = await _create_entry(mcp_client, "Relations B", subtopic="topic-y")
+
+    linked = await mcp_client.call_tool(
+        "memory_link_entries",
+        {"from_entry_id": a_id, "to_entry_id": b_id, "relation_type": "same_as", "note": "gleicher Kunde"},
+    )
+    assert linked.data == {
+        "from_entry_id": a_id,
+        "to_entry_id": b_id,
+        "relation_type": "same_as",
+        "note": "gleicher Kunde",
+    }
+
+    related_from_a = await mcp_client.call_tool("memory_get_related", {"entry_id": a_id})
+    assert len(related_from_a.data) == 1
+    assert related_from_a.data[0]["entry_id"] == b_id
+    assert related_from_a.data[0]["direction"] == "outgoing"
+    assert related_from_a.data[0]["subtopic"] == "topic-y"
+
+    related_from_b = await mcp_client.call_tool("memory_get_related", {"entry_id": b_id})
+    assert len(related_from_b.data) == 1
+    assert related_from_b.data[0]["entry_id"] == a_id
+    assert related_from_b.data[0]["direction"] == "incoming"
+
+
+async def test_memory_unlink_entries(mcp_client):
+    a_id = await _create_entry(mcp_client, "Unlink A")
+    b_id = await _create_entry(mcp_client, "Unlink B")
+    await mcp_client.call_tool(
+        "memory_link_entries", {"from_entry_id": a_id, "to_entry_id": b_id, "relation_type": "mentions"}
+    )
+
+    unlinked = await mcp_client.call_tool(
+        "memory_unlink_entries", {"from_entry_id": a_id, "to_entry_id": b_id, "relation_type": "mentions"}
+    )
+    assert unlinked.data == {"unlinked": True}
+
+    unlinked_again = await mcp_client.call_tool(
+        "memory_unlink_entries", {"from_entry_id": a_id, "to_entry_id": b_id, "relation_type": "mentions"}
+    )
+    assert unlinked_again.data == {"unlinked": False}
+
+    related = await mcp_client.call_tool("memory_get_related", {"entry_id": a_id})
+    assert related.data == []
+
+
+async def test_memory_link_entries_rejects_invalid_relation_type(mcp_client):
+    a_id = await _create_entry(mcp_client, "Invalid Type A")
+    b_id = await _create_entry(mcp_client, "Invalid Type B")
+    with pytest.raises(Exception):
+        await mcp_client.call_tool(
+            "memory_link_entries", {"from_entry_id": a_id, "to_entry_id": b_id, "relation_type": "not-a-type"}
+        )
+
+
+async def test_memory_link_entries_rejects_self_link(mcp_client):
+    a_id = await _create_entry(mcp_client, "Self Link A")
+    with pytest.raises(Exception):
+        await mcp_client.call_tool(
+            "memory_link_entries", {"from_entry_id": a_id, "to_entry_id": a_id, "relation_type": "related_to"}
+        )
