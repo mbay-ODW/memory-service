@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     embedding_model_name: str = "intfloat/multilingual-e5-small"
     embedding_dim: int = 384
 
+    upload_max_bytes: int = 10 * 1024 * 1024  # 10 MiB
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Dokument hochladen — memory-service{% endblock %}
+{% block content %}
+  <nav class="breadcrumb">
+    <a href="/">Projekte</a> /
+    <a href="/projects/{{ project.slug }}">{{ project.name }}</a> / Dokument hochladen
+  </nav>
+
+  <h1>Dokument hochladen</h1>
+  <p class="meta-line">
+    Der Text wird aus der Datei extrahiert und dir zur Prüfung/Bearbeitung vorgelegt --
+    gespeichert wird erst, wenn du das im nächsten Schritt bestätigst. Die hochgeladene Datei
+    selbst wird danach nicht aufbewahrt.
+  </p>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  <form method="post" action="/entries/upload" enctype="multipart/form-data">
+    <input type="hidden" name="project" value="{{ project.slug }}">
+
+    <label>Unterthema (z. B. <code>kunde-mueller/vorgang-2026-08</code>, optional)
+      <input type="text" name="subtopic" value="{{ subtopic_path }}">
+    </label>
+
+    <label>Datei
+      <input type="file" name="file" accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.html,.htm,.csv" required>
+    </label>
+
+    <div class="form-actions">
+      <button type="submit" class="button button-primary">Text extrahieren</button>
+      <a class="button" href="/projects/{{ project.slug }}">Abbrechen</a>
+    </div>
+  </form>
+{% endblock %}

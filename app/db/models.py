@@ -24,7 +24,7 @@ from app.db.base import Base
 SENSITIVITY_LEVELS = ("niedrig", "mittel", "hoch")
 ENTRY_STATUSES = ("aktuell", "veraltet")
 FOLLOW_UP_STATUSES = ("offen", "wartet")
-SOURCE_TYPES = ("mail", "whatsapp", "signal", "paperless", "nextcloud", "hero")
+SOURCE_TYPES = ("mail", "whatsapp", "signal", "paperless", "nextcloud", "hero", "document")
 RELATION_TYPES = (
     "related_to",
     "same_as",

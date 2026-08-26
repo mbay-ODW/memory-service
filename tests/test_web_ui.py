@@ -295,3 +295,54 @@ async def test_search_page_filters_by_tag(web_client):
     assert resp.status_code == 200
     assert "Getaggter Eintrag" in resp.text
     assert "Ungetaggt" not in resp.text
+
+
+async def test_upload_document_prefills_form_and_saves_with_document_source(web_client):
+    form_resp = await web_client.get("/entries/upload", params={"project": "webtest"})
+    assert form_resp.status_code == 200
+
+    upload_resp = await web_client.post(
+        "/entries/upload",
+        data={"project": "webtest", "subtopic": "upload-topic"},
+        files={"file": ("bericht.txt", b"Hallo aus dem hochgeladenen Dokument.", "text/plain")},
+    )
+    assert upload_resp.status_code == 200
+    assert "Hallo aus dem hochgeladenen Dokument." in upload_resp.text
+    assert 'value="bericht"' in upload_resp.text  # guessed title from the filename stem
+
+    save_resp = await web_client.post(
+        "/entries/new",
+        data={
+            "project": "webtest",
+            "subtopic": "upload-topic",
+            "title": "Bericht",
+            "body_markdown": "Hallo aus dem hochgeladenen Dokument.",
+            "source_ref": "bericht.txt",
+        },
+    )
+    assert save_resp.status_code == 303
+    entry_url = save_resp.headers["location"]
+
+    entry_resp = await web_client.get(entry_url)
+    assert "document:bericht.txt" in entry_resp.text
+
+
+async def test_upload_document_rejects_oversized_file(web_client):
+    from app.config import get_settings
+
+    oversized = b"x" * (get_settings().upload_max_bytes + 1)
+    resp = await web_client.post(
+        "/entries/upload",
+        data={"project": "webtest", "subtopic": "upload-topic"},
+        files={"file": ("big.txt", oversized, "text/plain")},
+    )
+    assert resp.status_code == 413
+
+
+async def test_upload_document_rejects_unsupported_extension(web_client):
+    resp = await web_client.post(
+        "/entries/upload",
+        data={"project": "webtest", "subtopic": "upload-topic"},
+        files={"file": ("virus.exe", b"whatever", "application/octet-stream")},
+    )
+    assert resp.status_code == 422

@@ -7,12 +7,13 @@ from pathlib import Path
 from uuid import UUID
 
 import markdown as md
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.db.base import get_session
 from app.db.models import Project, Source, Subtopic
 from app.db.repository import (
@@ -24,6 +25,7 @@ from app.db.repository import (
     get_subtopic_path_parts,
 )
 from app.services import entries as entries_service
+from app.services import extraction as extraction_service
 from app.services import projects as projects_service
 from app.services import relations as relations_service
 from app.services import search as search_service
@@ -343,6 +345,7 @@ async def create_entry(
     body_markdown: str = Form(...),
     tags: str = Form(""),
     follow_up_status: str = Form(""),
+    source_ref: str = Form(""),
     session: AsyncSession = Depends(get_session),
 ):
     entry = await entries_service.upsert_entry(
@@ -354,8 +357,77 @@ async def create_entry(
         actor=web_actor(request),
         tags=_tag_list(tags),
         follow_up_status=follow_up_status or "none",
+        sources=[("document", source_ref)] if source_ref else None,
     )
     return RedirectResponse(f"/entries/{entry.id}", status_code=303)
+
+
+@router.get("/entries/upload", response_class=HTMLResponse)
+async def upload_form(
+    request: Request, project: str, subtopic: str = "", session: AsyncSession = Depends(get_session)
+):
+    try:
+        proj = await get_project_by_slug(session, project)
+    except NotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return templates.TemplateResponse(
+        request, "entry_upload.html", {"project": proj, "subtopic_path": subtopic, "error": None}
+    )
+
+
+@router.post("/entries/upload")
+async def upload_and_extract(
+    request: Request,
+    project: str = Form(...),
+    subtopic: str = Form(""),
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        proj = await get_project_by_slug(session, project)
+    except NotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+    settings = get_settings()
+    data = await file.read()
+    if len(data) > settings.upload_max_bytes:
+        return templates.TemplateResponse(
+            request,
+            "entry_upload.html",
+            {
+                "project": proj,
+                "subtopic_path": subtopic,
+                "error": f"Datei zu groß (max. {settings.upload_max_bytes // (1024 * 1024)} MiB).",
+            },
+            status_code=413,
+        )
+
+    try:
+        body_markdown = await extraction_service.extract_text(file.filename or "upload", data)
+    except extraction_service.ExtractionError as exc:
+        return templates.TemplateResponse(
+            request,
+            "entry_upload.html",
+            {"project": proj, "subtopic_path": subtopic, "error": str(exc)},
+            status_code=422,
+        )
+
+    guessed_title = Path(file.filename).stem if file.filename else "Hochgeladenes Dokument"
+    return templates.TemplateResponse(
+        request,
+        "entry_edit.html",
+        {
+            "mode": "new",
+            "project": proj,
+            "subtopic_path": subtopic,
+            "entry": None,
+            "tags_csv": "",
+            "prefill_title": guessed_title,
+            "prefill_body": body_markdown,
+            "prefill_source_ref": file.filename or "upload",
+            "error": None,
+        },
+    )
 
 
 @router.get("/entries/{entry_id}", response_class=HTMLResponse)

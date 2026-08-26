@@ -36,6 +36,7 @@
         </div>
         <div class="entries-header-actions">
           <a class="button" href="/entries/new?project={{ project.slug }}&amp;subtopic={{ subtopic_path or '' }}">+ Neuer Eintrag</a>
+          <a class="button" href="/entries/upload?project={{ project.slug }}&amp;subtopic={{ subtopic_path or '' }}">Dokument hochladen</a>
           <a class="button" href="/projects/{{ project.slug }}/graph">Graph</a>
           {% if not subtopic_path %}<a class="button" href="/projects/{{ project.slug }}/edit">Projekt bearbeiten</a>{% endif %}
         </div>

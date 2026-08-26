@@ -24,12 +24,14 @@
       <label>Unterthema<input type="text" value="{{ subtopic_path }}" disabled></label>
     {% endif %}
 
+    {% if prefill_source_ref %}<input type="hidden" name="source_ref" value="{{ prefill_source_ref }}">{% endif %}
+
     <label>Titel
-      <input type="text" name="title" value="{{ entry.title if entry else '' }}" required>
+      <input type="text" name="title" value="{{ prefill_title if prefill_title is defined else (entry.title if entry else '') }}" required>
     </label>
 
     <label>Inhalt (Markdown)
-      <textarea id="body_markdown" name="body_markdown">{{ entry.body_markdown if entry else '' }}</textarea>
+      <textarea id="body_markdown" name="body_markdown">{{ prefill_body if prefill_body is defined else (entry.body_markdown if entry else '') }}</textarea>
     </label>
 
     <label>Tags (kommagetrennt)
