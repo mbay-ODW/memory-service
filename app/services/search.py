@@ -2,11 +2,11 @@
 Reciprocal Rank Fusion so neither signal has to "win" outright -- an exact term hit and a
 semantic near-miss both surface, which plain vector-only or fulltext-only search would miss."""
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Entry, Subtopic
+from app.db.models import Entry, Relation, Subtopic
 from app.db.repository import (
     collect_descendant_ids,
     find_subtopic_by_path,
@@ -48,6 +48,42 @@ async def _vector_candidates(session: AsyncSession, query: str, project_id, subt
     return [row[0] for row in (await session.execute(stmt)).all()]
 
 
+async def _relation_candidates(session: AsyncSession, seed_ids: list, project_id, subtopic_ids, limit: int) -> list:
+    """Direct (single-hop only) neighbors of whatever fulltext/vector search already
+    surfaced -- lets an entry with no textual/semantic match of its own still surface because
+    it's linked to something that did match. Neighbors are ranked by how many seed entries
+    point at them. Scoped to the same project/subtopic as the rest of the search, so a
+    relation can't leak an entry across project boundaries."""
+    if not seed_ids:
+        return []
+    seed_set = set(seed_ids)
+    rows = (
+        await session.execute(
+            select(Relation.from_entry_id, Relation.to_entry_id).where(
+                or_(Relation.from_entry_id.in_(seed_ids), Relation.to_entry_id.in_(seed_ids))
+            )
+        )
+    ).all()
+
+    counts: dict = {}
+    for from_id, to_id in rows:
+        for endpoint, other in ((from_id, to_id), (to_id, from_id)):
+            if endpoint in seed_set and other not in seed_set:
+                counts[other] = counts.get(other, 0) + 1
+    if not counts:
+        return []
+
+    scope_stmt = select(Entry.id).where(Entry.id.in_(counts.keys()))
+    if project_id is not None:
+        scope_stmt = scope_stmt.join(Subtopic, Entry.subtopic_id == Subtopic.id).where(Subtopic.project_id == project_id)
+    if subtopic_ids is not None:
+        scope_stmt = scope_stmt.where(Entry.subtopic_id.in_(subtopic_ids))
+    allowed = {row[0] for row in (await session.execute(scope_stmt)).all()}
+
+    ranked = sorted((eid for eid in counts if eid in allowed), key=lambda eid: counts[eid], reverse=True)
+    return ranked[:limit]
+
+
 async def search(
     session: AsyncSession,
     *,
@@ -68,7 +104,10 @@ async def search(
 
     fulltext_ids = await _fulltext_candidates(session, query, project_id, subtopic_ids, limit=limit * 2)
     vector_ids = await _vector_candidates(session, query, project_id, subtopic_ids, limit=limit * 2)
-    fused = _rrf_merge([fulltext_ids, vector_ids])
+    relation_ids = await _relation_candidates(
+        session, [*fulltext_ids, *vector_ids], project_id, subtopic_ids, limit=limit * 2
+    )
+    fused = _rrf_merge([fulltext_ids, vector_ids, relation_ids])
     top_ids = [item_id for item_id, _ in fused[:limit]]
     if not top_ids:
         return []
