@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — Graph — memory-service{% endblock %}
+{% block content %}
+  <nav class="breadcrumb">
+    <a href="/">Projekte</a> /
+    <a href="/projects/{{ project.slug }}">{{ project.name }}</a> / Graph
+  </nav>
+
+  <h1>{{ project.name }} — Verknüpfungsgraph</h1>
+
+  <div class="graph-legend">
+    <span class="graph-legend-item"><span class="graph-legend-swatch" style="background:#6b7280"></span>related_to</span>
+    <span class="graph-legend-item"><span class="graph-legend-swatch" style="background:#16a34a"></span>same_as</span>
+    <span class="graph-legend-item"><span class="graph-legend-swatch" style="background:#2563eb"></span>follow_up_of</span>
+    <span class="graph-legend-item"><span class="graph-legend-swatch" style="background:#9ca3af"></span>mentions</span>
+    <span class="graph-legend-item"><span class="graph-legend-swatch" style="background:#ea580c"></span>supersedes</span>
+    <span class="graph-legend-item"><span class="graph-legend-swatch" style="background:#dc2626"></span>causes</span>
+    <span class="graph-legend-item"><span class="graph-legend-swatch" style="background:#059669"></span>fixes</span>
+    <span class="graph-legend-item"><span class="graph-legend-swatch" style="background:#db2777"></span>contradicts</span>
+  </div>
+
+  <svg id="relation-graph" data-graph-url="/projects/{{ project.slug }}/graph/data"></svg>
+
+  <script src="/assets/graph.js"></script>
+{% endblock %}

@@ -255,3 +255,21 @@ async def test_entry_page_shows_related_entries(web_client):
     resp = await web_client.get(f"/entries/{b_id}")
     assert "Verknuepfung A" in resp.text
     assert "incoming" in resp.text
+
+
+async def test_project_graph_page_and_data_route(web_client):
+    resp = await web_client.post(
+        "/entries/new",
+        data={"project": "webtest", "subtopic": "graph-topic", "title": "Graph Eintrag", "body_markdown": "..."},
+    )
+    assert resp.status_code == 303
+
+    page_resp = await web_client.get("/projects/webtest/graph")
+    assert page_resp.status_code == 200
+    assert "relation-graph" in page_resp.text
+
+    data_resp = await web_client.get("/projects/webtest/graph/data")
+    assert data_resp.status_code == 200
+    body = data_resp.json()
+    assert any(n["title"] == "Graph Eintrag" for n in body["nodes"])
+    assert "edges" in body

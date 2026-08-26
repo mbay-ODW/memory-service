@@ -6,7 +6,7 @@ app/db/models.py for why this isn't mirrored into git the way tags/sources are.
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import RELATION_TYPES, Entry, Relation
+from app.db.models import RELATION_TYPES, Entry, Relation, Subtopic
 from app.services import entries as entries_service
 
 
@@ -126,3 +126,36 @@ async def get_related_entries(session: AsyncSession, entry_id) -> list[dict]:
             }
         )
     return results
+
+
+async def get_project_relation_graph(session: AsyncSession, project_id) -> dict:
+    """Nodes = current entries in this project; edges = relations where BOTH endpoints are in
+    this project. A relation to another project's entry is simply omitted -- not shown as a
+    dangling edge or a ghost node -- keeping the graph project-scoped. No transitive traversal:
+    this is exactly the same single-hop relation data as get_related_entries, just for every
+    entry in the project at once instead of one entry at a time."""
+    entries = (
+        await session.execute(
+            select(Entry.id, Entry.title, Entry.status)
+            .join(Subtopic, Entry.subtopic_id == Subtopic.id)
+            .where(Subtopic.project_id == project_id)
+        )
+    ).all()
+    entry_ids = {row[0] for row in entries}
+    if not entry_ids:
+        return {"nodes": [], "edges": []}
+
+    relations = (
+        await session.execute(
+            select(Relation.from_entry_id, Relation.to_entry_id, Relation.relation_type, Relation.note).where(
+                Relation.from_entry_id.in_(entry_ids), Relation.to_entry_id.in_(entry_ids)
+            )
+        )
+    ).all()
+
+    return {
+        "nodes": [{"id": str(eid), "title": title, "status": status} for eid, title, status in entries],
+        "edges": [
+            {"from": str(f), "to": str(t), "relation_type": rt, "note": note} for f, t, rt, note in relations
+        ],
+    }

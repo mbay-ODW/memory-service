@@ -204,3 +204,25 @@ td.diff_chg { background: #fef9c3; }
   .project-layout { flex-direction: column; }
   .tree { width: 100%; }
 }
+
+/* Shared relation-type color scheme, reused by the "Verknüpfte Einträge" list and graph.js
+   (which duplicates these same hex values as a JS constant -- this file is the source of
+   truth, kept in sync by hand, same convention already used for RELATION_TYPES itself). */
+.tag[data-relation="related_to"] { border-left: 3px solid #6b7280; }
+.tag[data-relation="same_as"] { border-left: 3px solid #16a34a; }
+.tag[data-relation="follow_up_of"] { border-left: 3px solid #2563eb; }
+.tag[data-relation="mentions"] { border-left: 3px solid #9ca3af; }
+.tag[data-relation="supersedes"] { border-left: 3px solid #ea580c; }
+.tag[data-relation="causes"] { border-left: 3px solid #dc2626; }
+.tag[data-relation="fixes"] { border-left: 3px solid #059669; }
+.tag[data-relation="contradicts"] { border-left: 3px solid #db2777; }
+
+.graph-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; font-size: 0.85rem; }
+.graph-legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.graph-legend-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+#relation-graph { width: 100%; height: 70vh; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+#relation-graph text { fill: var(--fg); font-size: 11px; }
+#relation-graph .graph-node { cursor: pointer; }
+#relation-graph .graph-node circle { fill: var(--accent); stroke: var(--bg); stroke-width: 2px; }
+#relation-graph .graph-node.veraltet circle { fill: var(--muted); }
+#relation-graph .graph-empty { fill: var(--muted); font-size: 0.9rem; }

@@ -176,6 +176,25 @@ async def delete_project_route(
     return RedirectResponse("/", status_code=303)
 
 
+# also registered before the catch-all below, same reason as /edit and /delete above.
+@router.get("/projects/{project_slug}/graph", response_class=HTMLResponse)
+async def project_graph(request: Request, project_slug: str, session: AsyncSession = Depends(get_session)):
+    try:
+        project = await get_project_by_slug(session, project_slug)
+    except NotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return templates.TemplateResponse(request, "project_graph.html", {"project": project})
+
+
+@router.get("/projects/{project_slug}/graph/data")
+async def project_graph_data(request: Request, project_slug: str, session: AsyncSession = Depends(get_session)):
+    try:
+        project = await get_project_by_slug(session, project_slug)
+    except NotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return await relations_service.get_project_relation_graph(session, project.id)
+
+
 @router.get("/projects/{project_slug}/{subtopic_path:path}", response_class=HTMLResponse)
 async def subtopic_view(
     request: Request, project_slug: str, subtopic_path: str, session: AsyncSession = Depends(get_session)

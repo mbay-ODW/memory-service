@@ -169,3 +169,35 @@ async def test_unlink_supersedes_does_not_revert_status(db_session, two_entries)
     await relations_service.unlink_entries(db_session, from_entry_id=a.id, to_entry_id=b.id, relation_type="supersedes")
     await db_session.refresh(b)
     assert b.status == "veraltet"
+
+
+async def test_get_project_relation_graph_nodes_and_edges(db_session, sample_project, two_entries):
+    a, b = two_entries
+    await relations_service.link_entries(
+        db_session, from_entry_id=a.id, to_entry_id=b.id, relation_type="same_as", note="dup", actor="t"
+    )
+
+    graph = await relations_service.get_project_relation_graph(db_session, sample_project.id)
+
+    assert {n["id"] for n in graph["nodes"]} == {str(a.id), str(b.id)}
+    assert graph["edges"] == [
+        {"from": str(a.id), "to": str(b.id), "relation_type": "same_as", "note": "dup"}
+    ]
+
+
+async def test_get_project_relation_graph_excludes_cross_project_relations(db_session, sample_project, two_entries):
+    a, b = two_entries
+    other_project = Project(slug="relgraphother", name="Other Graph Project", sensitivity_level="niedrig")
+    db_session.add(other_project)
+    await db_session.flush()
+    other_entry = await entries_service.upsert_entry(
+        db_session, project_slug="relgraphother", subtopic_path="topic", title="Other", body_markdown="...", actor="t"
+    )
+    await relations_service.link_entries(
+        db_session, from_entry_id=a.id, to_entry_id=other_entry.id, relation_type="related_to", actor="t"
+    )
+
+    graph = await relations_service.get_project_relation_graph(db_session, sample_project.id)
+
+    assert {n["id"] for n in graph["nodes"]} == {str(a.id), str(b.id)}
+    assert graph["edges"] == []  # the cross-project relation is omitted entirely
