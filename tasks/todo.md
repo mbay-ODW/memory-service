@@ -124,6 +124,21 @@ vocabulary, search boost, graph view, tag search, document upload, duplicate sug
       collapsed the SVG viewBox to `0 0 2 2` — fixed by using a fixed logical coordinate
       system instead, see `app/web/static/graph.js`), tag search, document upload (verified
       against the real running container via curl, not just the pytest client)
-- [ ] Not shipped to TrueNAS — same build → push → pull → migrate (two new CHECK-constraint
-      migrations, `0004` and `0005`) → redeploy sequence as every prior feature, re-passing
-      `env`; will confirm before touching the production DB/stack
+- [x] Shipped to TrueNAS (2026-08-26): `updateLocalStack` with `pullImage:true` alone silently
+      no-op'd again (same digest-comparison gotcha as before, see
+      [[reference_portainer_redeploy]]) — fixed by an explicit `POST /images/create` via
+      `dockerProxy` first (confirmed real layer download + "Downloaded newer image"), then
+      `updateLocalStack` again, which produced a genuinely new container
+      (`60ca0df6b48b`, new ImageID `334ef7cca607`). `alembic upgrade head` run inside the new
+      container, exit 0; verified both `ck_relations_type` and `ck_sources_type` CHECK
+      constraints reflect the full expanded vocabularies via direct `psql` against the prod
+      DB. Live smoke test via the real production MCP tools: `memory_upsert` ×2 → 
+      `memory_link_entries(relation_type="supersedes")` succeeded (previously would've been
+      rejected by the old CHECK constraint) → `memory_get` confirmed the superseded entry
+      dropped out of the default `aktuell` listing → `memory_get_related` confirmed the link
+      → both throwaway test entries deleted afterward. `curl -I` against `/` and `/mcp`
+      returned clean `401` (auth required, not a crash) confirming the service is alive.
+      Both containers "Up 3 minutes (healthy)" after redeploy. Web-UI-only features (graph
+      view, tag search, document upload) were not re-verified live in production beyond the
+      container being healthy — they were already verified end-to-end in local dev via
+      browser + curl before this deploy.
