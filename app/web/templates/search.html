@@ -4,10 +4,11 @@
   <h1>Suche</h1>
   <form action="/search" method="get" class="search-form">
     <input type="search" name="q" value="{{ query }}" placeholder="Volltext + semantisch..." autofocus>
+    <input type="text" name="tags" value="{{ tags_csv }}" placeholder="Tags (kommagetrennt)">
     <button type="submit" class="button button-primary">Suchen</button>
   </form>
 
-  {% if query %}
+  {% if query or tags_csv %}
     {% if results %}
       <table class="entry-table">
         <thead><tr><th>Titel</th><th>Tags</th><th>Status</th><th>Aktualisiert</th></tr></thead>
@@ -23,7 +24,7 @@
         </tbody>
       </table>
     {% else %}
-      <p class="empty">Keine Treffer für „{{ query }}“.</p>
+      <p class="empty">Keine Treffer{% if query %} für „{{ query }}“{% endif %}{% if tags_csv %} mit Tag(s) „{{ tags_csv }}“{% endif %}.</p>
     {% endif %}
   {% endif %}
 {% endblock %}

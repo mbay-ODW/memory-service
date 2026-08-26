@@ -79,9 +79,12 @@ async def dashboard(request: Request, session: AsyncSession = Depends(get_sessio
 
 
 @router.get("/search", response_class=HTMLResponse)
-async def search_page(request: Request, q: str = "", session: AsyncSession = Depends(get_session)):
-    results = await search_service.search(session, query=q, limit=25) if q.strip() else []
-    return templates.TemplateResponse(request, "search.html", {"query": q, "results": results})
+async def search_page(request: Request, q: str = "", tags: str = "", session: AsyncSession = Depends(get_session)):
+    tag_list = _tag_list(tags)
+    results = (
+        await search_service.search(session, query=q, tags=tag_list or None, limit=25) if q.strip() or tag_list else []
+    )
+    return templates.TemplateResponse(request, "search.html", {"query": q, "tags_csv": tags, "results": results})
 
 
 # NOTE ON ORDERING: /projects/new and /projects/{project_slug}/edit + /delete MUST be

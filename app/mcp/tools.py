@@ -66,19 +66,24 @@ def _version_summary(version) -> dict:
 
 @mcp.tool()
 async def memory_search(
-    query: str, project: str | None = None, subtopic: str | None = None, limit: int = 10
+    query: str = "",
+    project: str | None = None,
+    subtopic: str | None = None,
+    tags: list[str] | None = None,
+    limit: int = 10,
 ) -> list[dict]:
     """Full-text + semantic search across memory entries. Scope to a project (and optionally
-    a subtopic within it) to narrow results; omit both to search everything. Each result
-    includes its exact `subtopic` path -- pass that back verbatim into memory_upsert's
-    `subtopic` param to update this entry. Guessing the subtopic instead doesn't error, it
-    silently creates a duplicate entry under the guessed path. If a result turns out to be
-    about the same real-world thing as an entry you're about to create (same client under a
-    different title, say), prefer memory_link_entries(..., relation_type="same_as") over
-    creating a second entry."""
+    a subtopic within it) to narrow results; omit both to search everything. `tags` filters to
+    entries carrying ANY of the given tags (OR, not AND); `query` can be left empty to browse
+    purely by tag, sorted by most recently updated. Each result includes its exact `subtopic`
+    path -- pass that back verbatim into memory_upsert's `subtopic` param to update this entry.
+    Guessing the subtopic instead doesn't error, it silently creates a duplicate entry under
+    the guessed path. If a result turns out to be about the same real-world thing as an entry
+    you're about to create (same client under a different title, say), prefer
+    memory_link_entries(..., relation_type="same_as") over creating a second entry."""
     async with get_session_factory()() as session:
         results = await search_service.search(
-            session, query=query, project_slug=project, subtopic_path=subtopic, limit=limit
+            session, query=query, project_slug=project, subtopic_path=subtopic, tags=tags, limit=limit
         )
         return await _entry_summaries(session, results)
 

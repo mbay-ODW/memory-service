@@ -273,3 +273,25 @@ async def test_project_graph_page_and_data_route(web_client):
     body = data_resp.json()
     assert any(n["title"] == "Graph Eintrag" for n in body["nodes"])
     assert "edges" in body
+
+
+async def test_search_page_filters_by_tag(web_client):
+    await web_client.post(
+        "/entries/new",
+        data={
+            "project": "webtest",
+            "subtopic": "tag-search",
+            "title": "Getaggter Eintrag",
+            "body_markdown": "...",
+            "tags": "besonders-wichtig",
+        },
+    )
+    await web_client.post(
+        "/entries/new",
+        data={"project": "webtest", "subtopic": "tag-search", "title": "Ungetaggt", "body_markdown": "..."},
+    )
+
+    resp = await web_client.get("/search", params={"tags": "besonders-wichtig"})
+    assert resp.status_code == 200
+    assert "Getaggter Eintrag" in resp.text
+    assert "Ungetaggt" not in resp.text

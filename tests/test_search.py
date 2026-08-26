@@ -131,3 +131,55 @@ async def test_search_relation_boost_respects_project_scope(db_session, git_repo
         results = await search_service.search(db_session, query="irrelevant", project_slug="searchproj", limit=5)
 
     assert {r.id for r in results} == {matched.id}  # other-project entry must not leak in
+
+
+async def test_search_or_semantics_across_tags(db_session, git_repo_path, sample_project):
+    red = await entries_service.upsert_entry(
+        db_session,
+        project_slug="searchproj",
+        subtopic_path="topic",
+        title="Rot",
+        body_markdown="...",
+        actor="c",
+        tags=["rot"],
+    )
+    blue = await entries_service.upsert_entry(
+        db_session,
+        project_slug="searchproj",
+        subtopic_path="topic",
+        title="Blau",
+        body_markdown="...",
+        actor="c",
+        tags=["blau"],
+    )
+    await entries_service.upsert_entry(
+        db_session,
+        project_slug="searchproj",
+        subtopic_path="topic",
+        title="Gruen",
+        body_markdown="...",
+        actor="c",
+        tags=["gruen"],
+    )
+
+    results = await search_service.search(db_session, project_slug="searchproj", tags=["rot", "blau"])
+    assert {r.id for r in results} == {red.id, blue.id}
+
+
+async def test_search_pure_tag_browse_no_query(db_session, git_repo_path, sample_project):
+    entry = await entries_service.upsert_entry(
+        db_session,
+        project_slug="searchproj",
+        subtopic_path="topic",
+        title="Nur Tag",
+        body_markdown="Beliebiger Inhalt ohne Bezug zur Suchanfrage.",
+        actor="c",
+        tags=["besonders"],
+    )
+    results = await search_service.search(db_session, query="", project_slug="searchproj", tags=["besonders"])
+    assert [r.id for r in results] == [entry.id]
+
+
+async def test_search_empty_query_and_no_tags_returns_empty(db_session, git_repo_path, sample_project):
+    results = await search_service.search(db_session, query="", project_slug="searchproj")
+    assert results == []
