@@ -72,7 +72,7 @@ Connector URL: `https://memory-service.your-domain.example/mcp`
 Phase 6 (Cowork pilot wiring: connector + Standing Instruction + Scheduled Task for Interne
 IT), Phase 7 (RLS hardening, audit logging, before Privat/GEB/Steuer rollout).
 
-## Feature: entry relations (done locally, 2026-08-25)
+## Feature: entry relations (shipped to TrueNAS, 2026-08-26)
 - [x] Migration `0003_entry_relations` (`entry_relations` table, run + verified locally)
 - [x] `app/db/models.py` — `Relation` model, `RELATION_TYPES`
 - [x] `app/services/relations.py` — `link_entries`/`unlink_entries`/`get_related_entries`
@@ -81,8 +81,15 @@ IT), Phase 7 (RLS hardening, audit logging, before Privat/GEB/Steuer rollout).
 - [x] Tests: `test_relations_service.py` (8), `test_mcp_tools.py` (+4), `test_web_ui.py` (+1)
       — full suite 60/60 green
 - [x] README MCP tools table + hygiene grep sweep (clean)
-- [ ] Not shipped to TrueNAS yet — same build → push → pull → migrate → redeploy sequence as
-      every prior feature, re-passing `env` on `updateLocalStack`
+- [x] CI green on `main` (commit `2582b38`), image pulled fresh on TrueNAS (confirmed via
+      `POST /images/create` returning "Downloaded newer image", not the `pullImage:true`
+      no-op — see [[reference_portainer_redeploy]]'s digest gotcha), stack 59 redeployed,
+      `alembic upgrade head` run inside the container (exit 0), live smoke test via the real
+      MCP tools (`memory_create_project` → `memory_upsert` → `memory_delete_entry`) plus a
+      web-UI project delete, all against production
+- [ ] The three new tool schemas (`memory_link_entries`/`memory_unlink_entries`/
+      `memory_get_related`) won't show up in an already-open Cowork/Claude session until it
+      reconnects to the MCP connector — not a bug, just a stale client-side tool cache
 - [ ] Still open: whether to clean up the 5 known `geb` duplicate pairs now via
       `memory_delete_entry`/`memory_link_entries(same_as)`, or wait for a possible future
       `memory_merge_entries` tool — Murat hasn't decided yet
