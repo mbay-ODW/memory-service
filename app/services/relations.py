@@ -29,7 +29,13 @@ async def link_entries(
 
     # confirm both ends actually exist -- raises NotFoundError otherwise
     await entries_service.get_entry_by_id(session, from_entry_id)
-    await entries_service.get_entry_by_id(session, to_entry_id)
+    to_entry = await entries_service.get_entry_by_id(session, to_entry_id)
+
+    if relation_type == "supersedes":
+        # the superseded entry is now a documented historical fact -- flip it once, here, and
+        # leave it flipped regardless of what later happens to this relation (unlink_entries
+        # does NOT revert this; see its docstring).
+        to_entry.status = "veraltet"
 
     existing = (
         await session.execute(
@@ -62,7 +68,11 @@ async def link_entries(
 async def unlink_entries(session: AsyncSession, *, from_entry_id, to_entry_id, relation_type: str) -> bool:
     """Idempotent delete: returns whether a row was actually removed, doesn't raise if the
     relation is already absent -- "make sure these aren't linked" is naturally a no-op-tolerant
-    operation, unlike memory_delete_entry where the id being missing IS the point of the call."""
+    operation, unlike memory_delete_entry where the id being missing IS the point of the call.
+
+    Deliberately does NOT revert a "supersedes" link's status flip -- once an entry is marked
+    veraltet, that's a real fact about it, not something tied to whether this link still
+    exists."""
     existing = (
         await session.execute(
             select(Relation).where(

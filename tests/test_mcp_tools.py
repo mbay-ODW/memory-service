@@ -278,3 +278,18 @@ async def test_memory_link_entries_rejects_self_link(mcp_client):
         await mcp_client.call_tool(
             "memory_link_entries", {"from_entry_id": a_id, "to_entry_id": a_id, "relation_type": "related_to"}
         )
+
+
+async def test_memory_link_entries_supersedes_flips_status(mcp_client):
+    old_id = await _create_entry(mcp_client, "Supersedes Old", subtopic="topic-supersede")
+    new_id = await _create_entry(mcp_client, "Supersedes New", subtopic="topic-supersede")
+
+    before = await mcp_client.call_tool("memory_get", {"project": "mcptest", "subtopic": "topic-supersede"})
+    assert {e["id"] for e in before.data} == {old_id, new_id}
+
+    await mcp_client.call_tool(
+        "memory_link_entries", {"from_entry_id": new_id, "to_entry_id": old_id, "relation_type": "supersedes"}
+    )
+
+    after = await mcp_client.call_tool("memory_get", {"project": "mcptest", "subtopic": "topic-supersede"})
+    assert {e["id"] for e in after.data} == {new_id}  # old_id dropped out of the default aktuell listing

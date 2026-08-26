@@ -209,8 +209,11 @@ async def memory_link_entries(
 ) -> dict:
     """Record a direct link between two entries: "related_to" (generic), "same_as" (these are
     the same real-world thing, filed under different titles -- the fix for accidental
-    duplicates), "follow_up_of" (from_entry follows up on to_entry), or "mentions" (from_entry
-    references to_entry in passing). Re-linking the same pair with the same relation_type just
+    duplicates), "follow_up_of" (from_entry follows up on to_entry), "mentions" (from_entry
+    references to_entry in passing), "supersedes" (from_entry replaces to_entry -- this
+    automatically flips to_entry's status to "veraltet", since the old one is now a documented
+    historical fact, not current), "causes"/"fixes"/"contradicts" (causal relationships between
+    two documented facts or events). Re-linking the same pair with the same relation_type just
     updates the note, it doesn't create a duplicate link. Both entries must already exist.
     Prefer this over creating a near-duplicate entry whenever memory_search/memory_get turns up
     something that's really the same thing under a different title."""

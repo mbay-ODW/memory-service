@@ -101,7 +101,7 @@ the web UI, or the one `memory_create_project` MCP tool).
 | `memory_delete_entry` | Permanently delete one entry (DB row + git file, one commit) |
 | `memory_check_sources` | Batch dedup check for daily sync tasks (has this mail/message already been logged?) |
 | `memory_create_project` | Create a new project — the only structural MCP tool; rename/delete are web-UI-only, human-confirmed actions |
-| `memory_link_entries` | Record a direct, typed link between two entries (`related_to`, `same_as`, `follow_up_of`, `mentions`) — the fix for "same real-world thing, filed under two titles" instead of creating a duplicate |
+| `memory_link_entries` | Record a direct, typed link between two entries (`related_to`, `same_as`, `follow_up_of`, `mentions`, `supersedes`, `causes`, `fixes`, `contradicts`) — the fix for "same real-world thing, filed under two titles" instead of creating a duplicate; `supersedes` also auto-flips the old entry to `veraltet` |
 | `memory_unlink_entries` | Remove a specific link between two entries (idempotent) |
 | `memory_get_related` | Every entry directly linked to this one, in either direction |
 

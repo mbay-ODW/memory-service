@@ -25,7 +25,16 @@ SENSITIVITY_LEVELS = ("niedrig", "mittel", "hoch")
 ENTRY_STATUSES = ("aktuell", "veraltet")
 FOLLOW_UP_STATUSES = ("offen", "wartet")
 SOURCE_TYPES = ("mail", "whatsapp", "signal", "paperless", "nextcloud", "hero")
-RELATION_TYPES = ("related_to", "same_as", "follow_up_of", "mentions")
+RELATION_TYPES = (
+    "related_to",
+    "same_as",
+    "follow_up_of",
+    "mentions",
+    "supersedes",
+    "causes",
+    "fixes",
+    "contradicts",
+)
 
 
 def _uuid() -> uuid.UUID:

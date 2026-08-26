@@ -122,3 +122,50 @@ async def test_deleting_entry_cascades_relations(db_session, two_entries):
 
     remaining = await relations_service.get_related_entries(db_session, a.id)
     assert remaining == []
+
+
+@pytest.mark.parametrize("relation_type", ["causes", "fixes", "contradicts"])
+async def test_link_entries_accepts_causal_types(db_session, two_entries, relation_type):
+    a, b = two_entries
+    relation = await relations_service.link_entries(
+        db_session, from_entry_id=a.id, to_entry_id=b.id, relation_type=relation_type, actor="t"
+    )
+    assert relation.relation_type == relation_type
+
+
+async def test_link_entries_still_rejects_unknown_type_after_vocabulary_expansion(db_session, two_entries):
+    a, b = two_entries
+    with pytest.raises(Exception):
+        await relations_service.link_entries(
+            db_session, from_entry_id=a.id, to_entry_id=b.id, relation_type="definitely-not-a-type", actor="t"
+        )
+
+
+async def test_link_supersedes_flips_status(db_session, two_entries):
+    a, b = two_entries
+    assert b.status == "aktuell"
+    await relations_service.link_entries(
+        db_session, from_entry_id=a.id, to_entry_id=b.id, relation_type="supersedes", actor="t"
+    )
+    await db_session.refresh(b)
+    assert b.status == "veraltet"
+
+
+async def test_link_supersedes_is_idempotent(db_session, two_entries):
+    a, b = two_entries
+    for _ in range(2):
+        await relations_service.link_entries(
+            db_session, from_entry_id=a.id, to_entry_id=b.id, relation_type="supersedes", actor="t"
+        )
+    await db_session.refresh(b)
+    assert b.status == "veraltet"
+
+
+async def test_unlink_supersedes_does_not_revert_status(db_session, two_entries):
+    a, b = two_entries
+    await relations_service.link_entries(
+        db_session, from_entry_id=a.id, to_entry_id=b.id, relation_type="supersedes", actor="t"
+    )
+    await relations_service.unlink_entries(db_session, from_entry_id=a.id, to_entry_id=b.id, relation_type="supersedes")
+    await db_session.refresh(b)
+    assert b.status == "veraltet"

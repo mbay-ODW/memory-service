@@ -220,3 +220,30 @@ async def test_get_subtopic_paths_returns_full_path_per_entry(db_session, git_re
     paths = await entries_service.get_subtopic_paths(db_session, [nested, root])
     assert paths[nested.id] == "kunde-mueller/vorgang-2026-08"
     assert paths[root.id] == "allgemein"
+
+
+async def test_upsert_entry_does_not_reset_a_superseded_entrys_status(db_session, git_repo_path, sample_project):
+    entry = await entries_service.upsert_entry(
+        db_session, project_slug="testproj", subtopic_path="topic-a", title="Alt", body_markdown="v1", actor="claude"
+    )
+    entry.status = "veraltet"
+    await db_session.flush()
+
+    updated = await entries_service.upsert_entry(
+        db_session, project_slug="testproj", subtopic_path="topic-a", title="Alt", body_markdown="v2", actor="claude"
+    )
+    assert updated.id == entry.id
+    assert updated.status == "veraltet"
+
+
+async def test_update_entry_does_not_reset_a_superseded_entrys_status(db_session, git_repo_path, sample_project):
+    entry = await entries_service.upsert_entry(
+        db_session, project_slug="testproj", subtopic_path="topic-a", title="Alt", body_markdown="v1", actor="claude"
+    )
+    entry.status = "veraltet"
+    await db_session.flush()
+
+    updated = await entries_service.update_entry(
+        db_session, entry_id=entry.id, title="Alt Umbenannt", body_markdown="v2", actor="claude"
+    )
+    assert updated.status == "veraltet"

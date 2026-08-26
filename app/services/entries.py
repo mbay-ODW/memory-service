@@ -177,10 +177,12 @@ async def upsert_entry(
         )
         session.add(entry)
     else:
+        # status is intentionally left untouched here -- an entry marked "veraltet" via
+        # memory_link_entries(relation_type="supersedes") must stay that way across further
+        # edits; it's a real fact, not a byproduct of this write path.
         entry.title = title
         entry.body_markdown = body_markdown
         entry.updated_by = actor
-        entry.status = "aktuell"
 
     if follow_up_status is not None:
         entry.follow_up_status = None if follow_up_status == "none" else follow_up_status
@@ -225,11 +227,11 @@ async def update_entry(
         if collision is not None:
             raise ValueError(f"another entry with title-slug {new_slug!r} already exists in this subtopic")
 
+    # status is intentionally left untouched here -- see the matching comment in upsert_entry.
     entry.title = title
     entry.slug = new_slug
     entry.body_markdown = body_markdown
     entry.updated_by = actor
-    entry.status = "aktuell"
     if follow_up_status is not None:
         entry.follow_up_status = None if follow_up_status == "none" else follow_up_status
 
