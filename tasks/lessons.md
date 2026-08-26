@@ -124,3 +124,22 @@ renaming the underlying git file in the same commit (`git_store.write_and_commit
 `old_relative_path` param) rather than leaving an orphaned file under the old slug. If you add
 another write path, ask which of the two identity semantics it needs BEFORE reusing either
 function.
+
+## Don't size an SVG's viewBox from `getBoundingClientRect()` right after page load
+
+`graph.js` originally measured `#relation-graph`'s pixel box via `getBoundingClientRect()` at
+the moment its `fetch().then()` callback ran, and used that to set the `viewBox`. In practice
+this measured a near-zero box (`"0 0 2 2"`) despite the CSS (`width:100%; height:70vh`) being
+fully loaded and the element visibly correct-sized once you inspect it afterward — the layout
+pass apparently hadn't settled yet at that exact point in the load sequence. Every node/edge
+still rendered, just squeezed into a 2x2-pixel corner, invisible. Only caught by actually
+opening the page in a browser and screenshotting it — no console error, no failed network
+request, `pytest` had nothing to say about it (nothing in the test suite renders a real
+browser). Fixed by using a **fixed logical coordinate system** (`viewBox="0 0 1000 600"`,
+independent of any real pixel measurement) for the force-layout math — SVG scales that to
+whatever box CSS actually gives it via `preserveAspectRatio`, so the rendering is correct
+regardless of when it runs relative to layout. Lesson: for any inline `<script>` that reads
+its own container's rendered size synchronously on page load, prefer a fixed logical viewBox/
+coordinate space over `getBoundingClientRect()` unless there's a real reason pixel-precision
+matters — and always eyeball a new client-side rendering feature in an actual browser before
+calling it done, since this class of bug is invisible to pytest by construction.

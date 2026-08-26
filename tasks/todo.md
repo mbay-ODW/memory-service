@@ -93,3 +93,37 @@ IT), Phase 7 (RLS hardening, audit logging, before Privat/GEB/Steuer rollout).
 - [ ] Still open: whether to clean up the 5 known `geb` duplicate pairs now via
       `memory_delete_entry`/`memory_link_entries(same_as)`, or wait for a possible future
       `memory_merge_entries` tool — Murat hasn't decided yet
+
+## Feature set: relation vocabulary expansion, search boost, graph view, tag search,
+## document upload, duplicate suggester (built locally, 2026-08-26; NOT shipped to TrueNAS)
+Full design: `/Users/mbayram/.claude/plans/lazy-humming-possum.md`, "Feature set: relation
+vocabulary, search boost, graph view, tag search, document upload, duplicate suggester".
+
+- [x] Phase A — `supersedes`/`causes`/`fixes`/`contradicts` added to `RELATION_TYPES`
+      (migration `0004_relation_types_expand`, first drop+recreate-CHECK-constraint migration
+      in this repo)
+- [x] Phase B — `supersedes` auto-flips the superseded entry to `status="veraltet"`;
+      `upsert_entry`/`update_entry` no longer force `status="aktuell"` on every write (was
+      silently dead code before this, now load-bearing)
+- [x] Phase C — `search()` gains a third RRF candidate list sourced from `entry_relations`
+      (single-hop, project/subtopic-scoped)
+- [x] Phase D — per-project relations graph view (`/projects/{slug}/graph`), hand-rolled
+      vanilla-JS/SVG force layout (`app/web/static/graph.js`), no vendored graph library;
+      shared relation-type color scheme in `style.css`
+- [x] Phase E — tag-based search/filter (`tags` param on `search()` and `memory_search`, OR
+      semantics, empty-query pure-tag-browse mode)
+- [x] Phase F — document upload (`app/services/extraction.py`: pypdf/python-docx/python-pptx/
+      openpyxl, one per format, no OCR, no retention of the uploaded bytes) — two-step
+      upload→extract→prefill→review flow through the existing unchanged `POST /entries/new`
+- [x] Phase G — `memory_find_similar` MCP tool: pgvector self-join duplicate scan, report-only
+      by default, `related_to`-only even with `auto_link=True` (never `same_as`, never merges)
+- [x] All 7 phases: pytest green after each (97/97 at the end), hygiene grep sweep clean,
+      committed + pushed individually, CI green on `main` after each push
+- [x] Manual browser verification: graph view (nodes/edges/colors render, click-to-navigate
+      confirmed working after fixing a `getBoundingClientRect()`-before-layout bug that
+      collapsed the SVG viewBox to `0 0 2 2` — fixed by using a fixed logical coordinate
+      system instead, see `app/web/static/graph.js`), tag search, document upload (verified
+      against the real running container via curl, not just the pytest client)
+- [ ] Not shipped to TrueNAS — same build → push → pull → migrate (two new CHECK-constraint
+      migrations, `0004` and `0005`) → redeploy sequence as every prior feature, re-passing
+      `env`; will confirm before touching the production DB/stack
