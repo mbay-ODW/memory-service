@@ -293,3 +293,49 @@ async def test_memory_link_entries_supersedes_flips_status(mcp_client):
 
     after = await mcp_client.call_tool("memory_get", {"project": "mcptest", "subtopic": "topic-supersede"})
     assert {e["id"] for e in after.data} == {new_id}  # old_id dropped out of the default aktuell listing
+
+
+async def test_memory_find_similar_reports_by_default_then_links_with_auto_link(mcp_client):
+    body = "Der Kunde Frau Schmidt moechte eine neue Heizungsanlage einbauen lassen."
+    a_id = (
+        await mcp_client.call_tool(
+            "memory_upsert",
+            {
+                "project": "mcptest",
+                "subtopic": "topic-similar",
+                "title": "Frau Schmidt Heizung",
+                "body_markdown": body,
+            },
+        )
+    ).data["id"]
+    b_id = (
+        await mcp_client.call_tool(
+            "memory_upsert",
+            {
+                "project": "mcptest",
+                "subtopic": "topic-similar",
+                "title": "Frau Schmidt Heizung Kopie",
+                "body_markdown": body,
+            },
+        )
+    ).data["id"]
+
+    report = await mcp_client.call_tool("memory_find_similar", {"project": "mcptest"})
+    matches = [
+        r for r in report.data if {r["entry_a"]["id"], r["entry_b"]["id"]} == {a_id, b_id}
+    ]
+    assert len(matches) == 1
+    assert matches[0]["linked"] is False
+
+    related_before = await mcp_client.call_tool("memory_get_related", {"entry_id": a_id})
+    assert related_before.data == []
+
+    linked = await mcp_client.call_tool("memory_find_similar", {"project": "mcptest", "auto_link": True})
+    linked_matches = [
+        r for r in linked.data if {r["entry_a"]["id"], r["entry_b"]["id"]} == {a_id, b_id}
+    ]
+    assert linked_matches[0]["linked"] is True
+
+    related_after = await mcp_client.call_tool("memory_get_related", {"entry_id": a_id})
+    assert len(related_after.data) == 1
+    assert related_after.data[0]["relation_type"] == "related_to"

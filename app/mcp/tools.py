@@ -262,3 +262,22 @@ async def memory_get_related(entry_id: str) -> list[dict]:
     links (no transitive/multi-hop traversal) -- only direct links to this one entry."""
     async with get_session_factory()() as session:
         return await relations_service.get_related_entries(session, _parse_entry_id(entry_id))
+
+
+@mcp.tool()
+async def memory_find_similar(
+    project: str | None = None, threshold: float = 0.90, auto_link: bool = False
+) -> list[dict]:
+    """Scan for likely-duplicate entries (near-identical embeddings), optionally scoped to one
+    project; omit `project` to scan everything. `threshold` is a cosine-similarity cutoff
+    (0-1, higher = stricter) -- tune it if results are too noisy or too sparse. By default
+    (auto_link=False) this only REPORTS candidate pairs with a similarity score for you to
+    review -- it writes nothing. Even with auto_link=True it only ever creates a `related_to`
+    link, never `same_as` -- deciding two entries are genuinely the same real-world thing stays
+    a judgment call for you after looking at the actual content, not something this scan
+    asserts on its own. Never merges, deletes, or overwrites anything."""
+    async with get_session_factory()() as session:
+        actor = current_actor()
+        return await relations_service.find_similar_entries(
+            session, project_slug=project, threshold=threshold, auto_link=auto_link, actor=actor
+        )

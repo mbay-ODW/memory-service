@@ -201,3 +201,71 @@ async def test_get_project_relation_graph_excludes_cross_project_relations(db_se
 
     assert {n["id"] for n in graph["nodes"]} == {str(a.id), str(b.id)}
     assert graph["edges"] == []  # the cross-project relation is omitted entirely
+
+
+@pytest.fixture
+async def similar_pair(db_session, git_repo_path, sample_project):
+    body = "Der Kunde Herr Mueller moechte eine Waermepumpe einbauen lassen und bittet um ein Angebot."
+    a = await entries_service.upsert_entry(
+        db_session, project_slug="relproj", subtopic_path="kunden", title="Herr Mueller Beratungstermin",
+        body_markdown=body, actor="t",
+    )
+    b = await entries_service.upsert_entry(
+        db_session, project_slug="relproj", subtopic_path="allgemein", title="Herr Mueller Beratungstermin Kopie",
+        body_markdown=body, actor="t",
+    )
+    return a, b
+
+
+async def test_find_similar_entries_finds_near_duplicate_pair(db_session, similar_pair):
+    a, b = similar_pair
+    results = await relations_service.find_similar_entries(db_session, project_slug="relproj")
+    assert len(results) == 1
+    pair_ids = {results[0]["entry_a"]["id"], results[0]["entry_b"]["id"]}
+    assert pair_ids == {str(a.id), str(b.id)}
+    assert results[0]["similarity"] >= 0.90
+    assert results[0]["linked"] is False
+
+
+async def test_find_similar_entries_ignores_dissimilar_pair(db_session, similar_pair):
+    await entries_service.upsert_entry(
+        db_session,
+        project_slug="relproj",
+        subtopic_path="kunden",
+        title="Steuererklaerung 2026",
+        body_markdown="Unterlagen fuer die Einkommensteuererklaerung beim Finanzamt einreichen.",
+        actor="t",
+    )
+    results = await relations_service.find_similar_entries(db_session, project_slug="relproj")
+    # only the near-duplicate pair from similar_pair should show up, not the unrelated third entry
+    assert len(results) == 1
+
+
+async def test_find_similar_entries_excludes_already_linked_pairs(db_session, similar_pair):
+    a, b = similar_pair
+    await relations_service.link_entries(
+        db_session, from_entry_id=a.id, to_entry_id=b.id, relation_type="related_to", actor="t"
+    )
+    results = await relations_service.find_similar_entries(db_session, project_slug="relproj")
+    assert results == []
+
+
+async def test_find_similar_entries_respects_project_scope(db_session, git_repo_path, similar_pair):
+    other_project = Project(slug="simscopeother", name="Other Sim Scope Project", sensitivity_level="niedrig")
+    db_session.add(other_project)
+    await db_session.flush()
+
+    results = await relations_service.find_similar_entries(db_session, project_slug="simscopeother")
+    assert results == []  # the similar pair lives in relproj, not this project
+
+
+async def test_find_similar_entries_auto_link_creates_relation(db_session, similar_pair):
+    a, b = similar_pair
+    results = await relations_service.find_similar_entries(db_session, project_slug="relproj", auto_link=True, actor="t")
+    assert len(results) == 1
+    assert results[0]["linked"] is True
+
+    related = await relations_service.get_related_entries(db_session, a.id)
+    assert len(related) == 1
+    assert related[0]["relation_type"] == "related_to"
+    assert related[0]["entry_id"] == str(b.id)

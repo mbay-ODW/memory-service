@@ -104,6 +104,7 @@ the web UI, or the one `memory_create_project` MCP tool).
 | `memory_link_entries` | Record a direct, typed link between two entries (`related_to`, `same_as`, `follow_up_of`, `mentions`, `supersedes`, `causes`, `fixes`, `contradicts`) — the fix for "same real-world thing, filed under two titles" instead of creating a duplicate; `supersedes` also auto-flips the old entry to `veraltet` |
 | `memory_unlink_entries` | Remove a specific link between two entries (idempotent) |
 | `memory_get_related` | Every entry directly linked to this one, in either direction |
+| `memory_find_similar` | Scan for likely-duplicate entries via embedding similarity (optionally scoped to one project); reports candidate pairs by default, only links (never merges) with `auto_link=True` |
 
 Relations are direct links only — no transitive graph traversal, no automatic entity
 extraction. They live in Postgres only, not mirrored into git frontmatter like tags/sources

@@ -3,10 +3,12 @@ twice") -- Postgres-only, no git commit involved. See the `Relation` model docst
 app/db/models.py for why this isn't mirrored into git the way tags/sources are.
 """
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.db.models import RELATION_TYPES, Entry, Relation, Subtopic
+from app.db.repository import get_project_by_slug
 from app.services import entries as entries_service
 
 
@@ -159,3 +161,82 @@ async def get_project_relation_graph(session: AsyncSession, project_id) -> dict:
             {"from": str(f), "to": str(t), "relation_type": rt, "note": note} for f, t, rt, note in relations
         ],
     }
+
+
+async def find_similar_entries(
+    session: AsyncSession,
+    *,
+    project_slug: str | None = None,
+    threshold: float = 0.90,
+    limit: int = 50,
+    auto_link: bool = False,
+    actor: str = "system",
+) -> list[dict]:
+    """Scans existing embeddings for near-duplicate pairs (cosine similarity >= threshold)
+    within a project (or globally if omitted), excluding pairs already linked by any relation
+    type in either direction. Never merges or deletes anything: by default (auto_link=False)
+    this only reports candidates for review; even with auto_link=True it only ever creates
+    `related_to` links -- `same_as` stays a judgment call for the caller, never something this
+    scan asserts on its own. One SQL self-join using pgvector's cosine-distance operator
+    directly between two entries' embedding columns -- O(n^2), which is fine at realistic
+    homelab scale (dozens to low hundreds of entries per project) and not intended for much
+    larger corpora."""
+    e1 = aliased(Entry)
+    e2 = aliased(Entry)
+    max_distance = 1 - threshold
+    distance = e1.body_embedding.cosine_distance(e2.body_embedding)
+
+    already_linked = select(Relation.id).where(
+        or_(
+            and_(Relation.from_entry_id == e1.id, Relation.to_entry_id == e2.id),
+            and_(Relation.from_entry_id == e2.id, Relation.to_entry_id == e1.id),
+        )
+    )
+
+    stmt = (
+        select(e1.id, e1.title, e2.id, e2.title, distance)
+        .select_from(e1)
+        .join(e2, e1.id < e2.id)
+        .where(
+            e1.status == "aktuell",
+            e2.status == "aktuell",
+            e1.body_embedding.is_not(None),
+            e2.body_embedding.is_not(None),
+            distance < max_distance,
+            ~already_linked.exists(),
+        )
+    )
+    if project_slug:
+        project = await get_project_by_slug(session, project_slug)
+        s1 = aliased(Subtopic)
+        s2 = aliased(Subtopic)
+        stmt = (
+            stmt.join(s1, e1.subtopic_id == s1.id)
+            .join(s2, e2.subtopic_id == s2.id)
+            .where(s1.project_id == project.id, s2.project_id == project.id)
+        )
+    stmt = stmt.order_by(distance).limit(limit)
+
+    rows = (await session.execute(stmt)).all()
+
+    results = []
+    for a_id, a_title, b_id, b_title, dist in rows:
+        similarity = round(1 - dist, 4)
+        entry = {
+            "entry_a": {"id": str(a_id), "title": a_title},
+            "entry_b": {"id": str(b_id), "title": b_title},
+            "similarity": similarity,
+            "linked": False,
+        }
+        if auto_link:
+            await link_entries(
+                session,
+                from_entry_id=a_id,
+                to_entry_id=b_id,
+                relation_type="related_to",
+                note=f"auto-suggested: similarity {similarity}",
+                actor=actor,
+            )
+            entry["linked"] = True
+        results.append(entry)
+    return results
