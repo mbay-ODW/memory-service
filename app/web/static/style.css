@@ -96,6 +96,12 @@ h1:first-child { margin-top: 0; }
   color: var(--muted);
 }
 
+/* Entry tags are links to /search?tags=... (click to browse by that tag); their
+   border-left color comes from tag_color() in app/web/routes.py, a per-name hash so the same
+   tag always gets the same color. Relation-type and source tags stay plain (no href), so this
+   hover only applies where .tag is actually an <a>. */
+a.tag:hover { color: var(--accent); border-color: var(--accent); }
+
 .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
 .project-card {
   display: block;

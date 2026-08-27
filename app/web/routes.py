@@ -3,6 +3,7 @@ app/services/entries.py -- exactly the same functions the MCP tools call -- so t
 ever one write path, not two that could drift apart.
 """
 
+import zlib
 from pathlib import Path
 from uuid import UUID
 
@@ -44,6 +45,19 @@ def web_actor(request: Request) -> str:
 
 def _tag_list(raw: str) -> list[str]:
     return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+def tag_color(name: str) -> str:
+    """Deterministic per-tag-name color (same tag always gets the same color, across requests
+    and restarts) -- crc32 rather than Python's built-in hash(), since str hashing is
+    randomized per-process by default and would give every tag a new color on every restart.
+    Fixed saturation/lightness so it only needs to work as a border accent on top of the
+    existing light/dark `.tag` background, not as full-contrast text-on-background."""
+    hue = zlib.crc32(name.encode("utf-8")) % 360
+    return f"hsl({hue}, 65%, 45%)"
+
+
+templates.env.filters["tag_color"] = tag_color
 
 
 def _build_tree(subtopics: list[Subtopic]) -> list[dict]:

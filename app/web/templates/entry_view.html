@@ -20,7 +20,7 @@
     <span class="badge badge-{{ project.sensitivity_level }}">{{ project.sensitivity_level }}</span>
     <span class="badge badge-status-{{ entry.status }}">{{ entry.status }}</span>
     {% if entry.follow_up_status %}<span class="badge badge-followup">{{ entry.follow_up_status }}</span>{% endif %}
-    {% for tag in entry.tags %}<span class="tag">{{ tag.name }}</span>{% endfor %}
+    {% for tag in entry.tags %}<a class="tag" href="/search?tags={{ tag.name|urlencode }}" style="border-left: 3px solid {{ tag.name|tag_color }};">{{ tag.name }}</a>{% endfor %}
     <span class="meta-line">zuletzt geändert {{ entry.updated_at.strftime("%Y-%m-%d %H:%M") if entry.updated_at else "" }} von {{ entry.updated_by }}</span>
   </div>
 

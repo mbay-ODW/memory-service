@@ -346,3 +346,34 @@ async def test_upload_document_rejects_unsupported_extension(web_client):
         files={"file": ("virus.exe", b"whatever", "application/octet-stream")},
     )
     assert resp.status_code == 422
+
+
+async def test_entry_tags_are_clickable_links_to_tag_search(web_client):
+    resp = await web_client.post(
+        "/entries/new",
+        data={
+            "project": "webtest",
+            "subtopic": "tag-links",
+            "title": "Verlinkter Tag Eintrag",
+            "body_markdown": "...",
+            "tags": "klickbar",
+        },
+    )
+    entry_url = resp.headers["location"]
+
+    entry_resp = await web_client.get(entry_url)
+    assert 'href="/search?tags=klickbar"' in entry_resp.text
+    assert "border-left: 3px solid hsl(" in entry_resp.text
+
+    project_resp = await web_client.get("/projects/webtest/tag-links")
+    assert 'href="/search?tags=klickbar"' in project_resp.text
+
+    search_resp = await web_client.get("/search", params={"tags": "klickbar"})
+    assert 'href="/search?tags=klickbar"' in search_resp.text
+
+
+async def test_tag_color_is_deterministic():
+    from app.web.routes import tag_color
+
+    assert tag_color("wichtig") == tag_color("wichtig")
+    assert tag_color("wichtig") != tag_color("dringend")

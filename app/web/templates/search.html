@@ -16,7 +16,7 @@
           {% for entry in results %}
             <tr>
               <td><a href="/entries/{{ entry.id }}">{{ entry.title }}</a></td>
-              <td>{% for tag in entry.tags %}<span class="tag">{{ tag.name }}</span>{% endfor %}</td>
+              <td>{% for tag in entry.tags %}<a class="tag" href="/search?tags={{ tag.name|urlencode }}" style="border-left: 3px solid {{ tag.name|tag_color }};">{{ tag.name }}</a>{% endfor %}</td>
               <td>{% if entry.follow_up_status %}<span class="badge badge-followup">{{ entry.follow_up_status }}</span>{% endif %}</td>
               <td>{{ entry.updated_at.strftime("%Y-%m-%d %H:%M") if entry.updated_at else "" }}</td>
             </tr>
