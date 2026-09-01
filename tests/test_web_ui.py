@@ -42,6 +42,25 @@ async def web_client():
         yield client
 
 
+async def test_web_routes_require_remote_user(web_client):
+    """The web UI must not be readable without the forward-auth header, and reads count
+    for as much as writes -- dashboard, search and entry pages are the bulk of the data.
+
+    Lives here rather than in test_auth.py because it has to go through the same ASGI
+    transport as the other web tests: TestClient would bind the DB engine to its own
+    event loop and break every async test that runs afterwards (see module docstring).
+    """
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as anon:
+        for path in ("/", "/search?q=test", "/projects/webtest", "/entries/new"):
+            resp = await anon.get(path)
+            assert resp.status_code == 401, path
+
+    # same paths, header present -- web_client sends it on every request
+    assert (await web_client.get("/")).status_code == 200
+    assert (await web_client.get("/projects/webtest")).status_code == 200
+
+
 async def test_full_web_ui_flow(web_client):
     resp = await web_client.get("/projects/webtest")
     assert resp.status_code == 200
