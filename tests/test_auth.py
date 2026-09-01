@@ -31,6 +31,20 @@ def test_mcp_accepts_dev_token():
     assert resp.status_code == 200
 
 
+def test_web_routes_reject_missing_remote_user():
+    """The web UI must not be readable without the forward-auth header. Reads matter as
+    much as writes here: the dashboard, search and entry pages are the bulk of the data."""
+    with TestClient(app) as client:
+        for path in ("/", "/search?q=test", "/projects/anything", "/entries/new"):
+            assert client.get(path).status_code == 401, path
+
+
+def test_web_routes_accept_remote_user():
+    with TestClient(app) as client:
+        resp = client.get("/", headers={"Remote-User": "someone"})
+    assert resp.status_code == 200
+
+
 def test_healthz_does_not_require_auth():
     with TestClient(app) as client:
         resp = client.get("/healthz")

@@ -32,15 +32,34 @@ from app.services import relations as relations_service
 from app.services import search as search_service
 from app.services.git_store import get_git_store
 
-router = APIRouter()
+def require_web_user(request: Request) -> str:
+    """Authentication gate for the web UI, checked in the app and not only in the proxy.
+
+    Authelia's forward-auth sets Remote-User on the way in and every web route sits
+    behind it. Verifying the same header here a second time means a route that loses
+    its middleware turns into a 401 for everyone instead of an open door.
+
+    Wired as a router-level dependency on purpose: attaching it only where an actor is
+    needed would gate the writes and leave every read route -- dashboard, search, entry
+    view -- wide open, and reads are the larger half of the surface.
+
+    WEB_AUTH_REQUIRED=false turns it off for local development, where no proxy exists.
+    """
+    remote_user = request.headers.get("remote-user")
+    if remote_user:
+        return f"user:{remote_user}"
+    if get_settings().web_auth_required:
+        raise HTTPException(status_code=401, detail="unauthenticated")
+    return "user:web"
+
+
+router = APIRouter(dependencies=[Depends(require_web_user)])
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 def web_actor(request: Request) -> str:
-    """Authelia forward-auth (production) sets Remote-User on the way in; local dev has no
-    such header, so writes are attributed to a generic "web" actor instead."""
-    remote_user = request.headers.get("remote-user")
-    return f"user:{remote_user}" if remote_user else "user:web"
+    """Git author / entries.updated_by for writes coming from the web UI."""
+    return require_web_user(request)
 
 
 def _tag_list(raw: str) -> list[str]:

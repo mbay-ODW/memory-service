@@ -33,8 +33,12 @@ async def web_project(_prepare_database):
 
 @pytest.fixture
 async def web_client():
+    """Sends Remote-User on every request, the way Authelia's forward-auth does in
+    production -- the web router requires it (see require_web_user)."""
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://testserver", headers={"Remote-User": "testuser"}
+    ) as client:
         yield client
 
 

@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     auth_mode: Literal["dev", "oidc"] = "dev"
     dev_bearer_token: str = "dev-local-token"
 
+    # Gate for the web UI, checked in the app itself rather than only in the proxy.
+    # Defaults to on so that a deployment which forgets the variable is closed, not
+    # open; local development without a proxy sets it to false.
+    web_auth_required: bool = True
+
     oidc_introspection_url: str = ""
     oidc_client_id: str = "memory-service"
     oidc_client_secret: str = ""
