@@ -1,4 +1,6 @@
 FROM python:3.12-slim
+# Docker-Secrets: NAME_FILE=/run/secrets/... wird beim Start zu NAME geladen
+COPY --chmod=0755 env-secrets.sh /usr/local/bin/env-secrets
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -15,4 +17,5 @@ ENV PYTHONUNBUFFERED=1 \
 
 EXPOSE 8000
 
+ENTRYPOINT ["/usr/local/bin/env-secrets"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
