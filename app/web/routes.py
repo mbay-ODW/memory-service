@@ -378,6 +378,7 @@ async def create_entry(
     body_markdown: str = Form(...),
     tags: str = Form(""),
     follow_up_status: str = Form(""),
+    occurred_at: str = Form(""),
     source_ref: str = Form(""),
     session: AsyncSession = Depends(get_session),
 ):
@@ -390,6 +391,7 @@ async def create_entry(
         actor=web_actor(request),
         tags=_tag_list(tags),
         follow_up_status=follow_up_status or "none",
+        occurred_at=occurred_at,
         sources=[("document", source_ref)] if source_ref else None,
     )
     return RedirectResponse(f"/entries/{entry.id}", status_code=303)
@@ -516,6 +518,7 @@ async def update_entry_route(
     body_markdown: str = Form(...),
     tags: str = Form(""),
     follow_up_status: str = Form(""),
+    occurred_at: str = Form(""),
     session: AsyncSession = Depends(get_session),
 ):
     try:
@@ -527,6 +530,7 @@ async def update_entry_route(
             actor=web_actor(request),
             tags=_tag_list(tags),
             follow_up_status=follow_up_status or "none",
+            occurred_at=occurred_at,
         )
     except ValueError as exc:
         existing = await entries_service.get_entry_by_id(session, entry_id)

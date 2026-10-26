@@ -142,3 +142,26 @@ vocabulary, search boost, graph view, tag search, document upload, duplicate sug
       view, tag search, document upload) were not re-verified live in production beyond the
       container being healthy — they were already verified end-to-end in local dev via
       browser + curl before this deploy.
+
+
+## Ereignisdatum + Recency-Boost (2026-10-26)
+Idee aus dem Vergleich mit Hindsight (vectorize.io): Zeitpunkt des Ereignisses getrennt von
+"zuletzt geschrieben", und neuere Einträge leicht bevorzugen.
+- [x] Migration 0006: `entries.occurred_at DATE NULL` (kein Backfill -- NULL = unbekannt)
+- [x] upsert_entry/update_entry: `occurred_at` (ISO-Datum oder -Zeitstempel, "none" leert,
+      None lässt unverändert); Git-Frontmatter `occurred:` nur wenn gesetzt
+- [x] MCP: `memory_upsert(occurred_at=...)`, alle Lese-Tools liefern `occurred_at`
+- [x] Web: Datumsfeld im Edit-Formular, Anzeige in der Eintragsansicht
+- [x] search: Recency-Boost nach RRF auf der ganzen Kandidatenliste; Tag-Browse sortiert
+      nach Ereignisdatum
+- [x] Tests (111 grün, gegen eingebettetes Postgres 16 + pgvector, weil Docker-VM voll war)
+- [ ] Deploy auf TrueNAS (Stack 59: Image bauen, `alembic upgrade head`)
+- [ ] Sync-Prompts (`memory-sync-prompts/tages-sync.md`, `wochen-tiefenpruefung.md`) anweisen,
+      `occurred_at` zu setzen -- sonst greift nur der updated_at-Fallback
+
+### Review
+Boost-Gewicht 0.15 / Halbwertszeit 90 Tage: ein heutiger Eintrag überholt einen ein Jahr
+alten bis zu ~9 Ränge innerhalb desselben Signals, aber nie einen Treffer, den Volltext UND
+Vektor gemeinsam oben haben. Bestehende Einträge haben kein occurred_at; bis die Sync-Jobs es
+setzen, zählt updated_at -- d. h. die Wochen-Tiefenprüfung kann alte Einträge vorübergehend
+"frisch" machen.

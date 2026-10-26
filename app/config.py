@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     embedding_model_name: str = "intfloat/multilingual-e5-small"
     embedding_dim: int = 384
 
+    # Recency boost in search: final score = rrf * (1 + weight * 0.5 ** (age_days / half_life)).
+    # With 0.15, a today-entry can overtake a year-old one up to ~9 ranks above it within the
+    # same signal (adjacent RRF ranks differ by ~1.6%), but never a hit that fulltext and vector
+    # both agree on, which scores ~2x a single-signal hit.
+    # Weight 0 disables it.
+    search_recency_weight: float = 0.15
+    search_recency_half_life_days: float = 90.0
+
     upload_max_bytes: int = 10 * 1024 * 1024  # 10 MiB
 
 

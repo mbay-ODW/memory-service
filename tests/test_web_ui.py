@@ -400,3 +400,33 @@ async def test_tag_color_is_deterministic():
 
     assert tag_color("wichtig") == tag_color("wichtig")
     assert tag_color("wichtig") != tag_color("dringend")
+
+
+async def test_occurred_at_via_edit_form(web_client):
+    resp = await web_client.post(
+        "/entries/new",
+        data={
+            "project": "webtest",
+            "subtopic": "ereignis",
+            "title": "Web Ereignisdatum",
+            "body_markdown": "Text.",
+            "occurred_at": "2026-10-24",
+        },
+    )
+    assert resp.status_code == 303
+    entry_url = resp.headers["location"]
+
+    resp = await web_client.get(entry_url)
+    assert "Ereignis 2026-10-24" in resp.text
+
+    resp = await web_client.get(f"{entry_url}/edit")
+    assert 'name="occurred_at" value="2026-10-24"' in resp.text
+
+    # clearing the date input submits an empty string, which clears the field
+    resp = await web_client.post(
+        f"{entry_url}/edit",
+        data={"title": "Web Ereignisdatum", "body_markdown": "Text.", "occurred_at": ""},
+    )
+    assert resp.status_code == 303
+    resp = await web_client.get(entry_url)
+    assert "Ereignis 2026-10-24" not in resp.text

@@ -247,3 +247,67 @@ async def test_update_entry_does_not_reset_a_superseded_entrys_status(db_session
         db_session, entry_id=entry.id, title="Alt Umbenannt", body_markdown="v2", actor="claude"
     )
     assert updated.status == "veraltet"
+
+
+async def test_occurred_at_set_kept_cleared_and_written_to_git(db_session, git_repo_path, sample_project):
+    from datetime import date
+    from pathlib import Path
+
+    def _write(**kwargs):
+        return entries_service.upsert_entry(
+            db_session,
+            project_slug="testproj",
+            subtopic_path="topic-occ",
+            title="Begehung Mueller",
+            body_markdown="Begehung fand statt.",
+            actor="claude",
+            **kwargs,
+        )
+
+    entry = await _write(occurred_at="2026-10-24")
+    assert entry.occurred_at == date(2026, 10, 24)
+    git_file = Path(git_repo_path) / "testproj" / "topic-occ" / "begehung-mueller.md"
+    assert "occurred: '2026-10-24'" in git_file.read_text(encoding="utf-8")
+
+    # None = leave untouched (a wording tidy-up must not lose the event date)
+    entry = await _write()
+    assert entry.occurred_at == date(2026, 10, 24)
+
+    # a full timestamp (e.g. a mail's Date header) is truncated to its date
+    entry = await _write(occurred_at="2026-10-25T18:30:00+02:00")
+    assert entry.occurred_at == date(2026, 10, 25)
+
+    entry = await _write(occurred_at="none")
+    assert entry.occurred_at is None
+    assert "occurred:" not in git_file.read_text(encoding="utf-8")
+
+
+async def test_occurred_at_rejects_garbage(db_session, git_repo_path, sample_project):
+    with pytest.raises(ValueError, match="occurred_at"):
+        await entries_service.upsert_entry(
+            db_session,
+            project_slug="testproj",
+            subtopic_path="topic-occ",
+            title="Kaputtes Datum",
+            body_markdown="...",
+            actor="claude",
+            occurred_at="letzten Dienstag",
+        )
+
+
+async def test_update_entry_sets_occurred_at(db_session, git_repo_path, sample_project):
+    from datetime import date
+
+    entry = await entries_service.upsert_entry(
+        db_session,
+        project_slug="testproj",
+        subtopic_path="topic-occ",
+        title="Web-Edit",
+        body_markdown="...",
+        actor="claude",
+    )
+    assert entry.occurred_at is None
+    updated = await entries_service.update_entry(
+        db_session, entry_id=entry.id, title="Web-Edit", body_markdown="...", actor="web", occurred_at="2026-09-01"
+    )
+    assert updated.occurred_at == date(2026, 9, 1)

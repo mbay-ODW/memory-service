@@ -183,3 +183,111 @@ async def test_search_pure_tag_browse_no_query(db_session, git_repo_path, sample
 async def test_search_empty_query_and_no_tags_returns_empty(db_session, git_repo_path, sample_project):
     results = await search_service.search(db_session, query="", project_slug="searchproj")
     assert results == []
+
+
+# --- recency boost -------------------------------------------------------------------------
+
+from datetime import date, timedelta  # noqa: E402
+
+from app.config import get_settings  # noqa: E402
+
+
+def test_recency_factor_shape():
+    today = date(2026, 10, 26)
+    kw = {"weight": 0.2, "half_life_days": 90}
+    assert search_service._recency_factor(today, today, **kw) == pytest.approx(1.2)
+    assert search_service._recency_factor(today - timedelta(days=90), today, **kw) == pytest.approx(1.1)
+    assert search_service._recency_factor(today - timedelta(days=900), today, **kw) == pytest.approx(1.0, abs=1e-3)
+    # a scheduled future appointment counts as "today", not as extra-fresh
+    assert search_service._recency_factor(today + timedelta(days=30), today, **kw) == pytest.approx(1.2)
+    assert search_service._recency_factor(None, today, **kw) == 1.0
+    assert search_service._recency_factor(today, today, weight=0.0, half_life_days=90) == 1.0
+
+
+async def _two_entries(db_session, *, old_occurred, new_occurred):
+    old = await entries_service.upsert_entry(
+        db_session,
+        project_slug="searchproj",
+        subtopic_path="recency",
+        title="Dach Angebot alt",
+        body_markdown="Erstes Angebot fuer das Dach.",
+        actor="claude",
+        occurred_at=old_occurred,
+    )
+    new = await entries_service.upsert_entry(
+        db_session,
+        project_slug="searchproj",
+        subtopic_path="recency",
+        title="Dach Angebot neu",
+        body_markdown="Nachtragsangebot fuer das Dach.",
+        actor="claude",
+        occurred_at=new_occurred,
+    )
+    return old, new
+
+
+async def test_recency_boost_lifts_newer_entry_among_near_equal_matches(db_session, git_repo_path, sample_project):
+    old, new = await _two_entries(
+        db_session, old_occurred="2025-01-10", new_occurred=date.today().isoformat()
+    )
+    # both signals rank the old entry one place above the new one -- near-equal matches
+    with (
+        patch("app.services.search._fulltext_candidates", return_value=[old.id, new.id]),
+        patch("app.services.search._vector_candidates", return_value=[old.id, new.id]),
+    ):
+        results = await search_service.search(db_session, query="Dach", project_slug="searchproj")
+    assert [e.id for e in results] == [new.id, old.id]
+
+
+async def test_recency_boost_does_not_beat_a_clearly_better_match(db_session, git_repo_path, sample_project):
+    old, new = await _two_entries(
+        db_session, old_occurred="2025-01-10", new_occurred=date.today().isoformat()
+    )
+    # old is the top hit in BOTH signals; new only shows up in one
+    with (
+        patch("app.services.search._fulltext_candidates", return_value=[old.id, new.id]),
+        patch("app.services.search._vector_candidates", return_value=[old.id]),
+    ):
+        results = await search_service.search(db_session, query="Dach", project_slug="searchproj")
+    assert [e.id for e in results] == [old.id, new.id]
+
+
+async def test_recency_falls_back_to_updated_at_without_occurred_at(db_session, git_repo_path, sample_project):
+    # new has no event date, but was written just now -> updated_at (today) stands in for it
+    old, new = await _two_entries(db_session, old_occurred="2025-01-10", new_occurred=None)
+    assert new.occurred_at is None
+    with (
+        patch("app.services.search._fulltext_candidates", return_value=[old.id, new.id]),
+        patch("app.services.search._vector_candidates", return_value=[old.id, new.id]),
+    ):
+        results = await search_service.search(db_session, query="Dach", project_slug="searchproj")
+    assert [e.id for e in results] == [new.id, old.id]
+
+
+async def test_recency_weight_zero_keeps_pure_rrf_order(db_session, git_repo_path, sample_project, monkeypatch):
+    old, new = await _two_entries(
+        db_session, old_occurred="2025-01-10", new_occurred=date.today().isoformat()
+    )
+    monkeypatch.setattr(get_settings(), "search_recency_weight", 0.0)
+    with (
+        patch("app.services.search._fulltext_candidates", return_value=[old.id, new.id]),
+        patch("app.services.search._vector_candidates", return_value=[old.id, new.id]),
+    ):
+        results = await search_service.search(db_session, query="Dach", project_slug="searchproj")
+    assert [e.id for e in results] == [old.id, new.id]
+
+
+async def test_tag_browse_orders_by_event_date(db_session, git_repo_path, sample_project):
+    for title, occurred in (("Mitte", "2026-05-01"), ("Neu", "2026-10-01"), ("Alt", "2025-01-01")):
+        await entries_service.upsert_entry(
+            db_session,
+            project_slug="searchproj",
+            subtopic_path="recency",
+            title=title,
+            body_markdown="...",
+            actor="claude",
+            tags=["chrono"],
+            occurred_at=occurred,
+        )
+    results = await search_service.search(db_session, tags=["chrono"], project_slug="searchproj")
+    assert [e.title for e in results] == ["Neu", "Mitte", "Alt"]

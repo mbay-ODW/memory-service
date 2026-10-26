@@ -1,11 +1,15 @@
 """Full-text (Postgres tsvector/GIN) + semantic (pgvector/HNSW) search, merged with
 Reciprocal Rank Fusion so neither signal has to "win" outright -- an exact term hit and a
-semantic near-miss both surface, which plain vector-only or fulltext-only search would miss."""
+semantic near-miss both surface, which plain vector-only or fulltext-only search would miss.
+The fused score then gets a mild multiplicative recency boost (see _apply_recency_boost)."""
 
-from sqlalchemy import func, or_, select
+from datetime import date
+
+from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import get_settings
 from app.db.models import Entry, Relation, Subtopic, Tag, entry_tags
 from app.db.repository import (
     collect_descendant_ids,
@@ -24,6 +28,48 @@ def _rrf_merge(rankings: list[list]) -> list[tuple]:
         for rank, item_id in enumerate(ranking):
             scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (_RRF_K + rank + 1)
     return sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+
+
+def _recency_factor(event_date: date | None, today: date, *, weight: float, half_life_days: float) -> float:
+    """1 + weight for something that happened today, decaying by half every half_life_days.
+    Future dates (a scheduled appointment) count as today rather than earning extra boost."""
+    if event_date is None or weight <= 0:
+        return 1.0
+    age_days = max((today - event_date).days, 0)
+    return 1.0 + weight * 0.5 ** (age_days / half_life_days)
+
+
+def _effective_date_expr():
+    # occurred_at when the writer recorded one; otherwise the last write is the best guess
+    # we have. Cast to DATE (not the other way round) so both branches share a type.
+    return func.coalesce(Entry.occurred_at, cast(Entry.updated_at, Date))
+
+
+async def _apply_recency_boost(session: AsyncSession, fused: list[tuple], today: date | None = None) -> list[tuple]:
+    """Re-rank the full fused candidate list (before it's cut to `limit`, so a recent entry
+    just below the cut can still move up). One query for all candidates' effective dates."""
+    settings = get_settings()
+    if not fused or settings.search_recency_weight <= 0:
+        return fused
+    today = today or date.today()
+    ids = [item_id for item_id, _ in fused]
+    dates = dict(
+        (await session.execute(select(Entry.id, _effective_date_expr()).where(Entry.id.in_(ids)))).all()
+    )
+    boosted = [
+        (
+            item_id,
+            score
+            * _recency_factor(
+                dates.get(item_id),
+                today,
+                weight=settings.search_recency_weight,
+                half_life_days=settings.search_recency_half_life_days,
+            ),
+        )
+        for item_id, score in fused
+    ]
+    return sorted(boosted, key=lambda kv: kv[1], reverse=True)
 
 
 def _tag_filter_subquery(tag_names: list[str]):
@@ -103,13 +149,13 @@ async def _relation_candidates(
 
 async def _tag_filtered_ids(session: AsyncSession, tag_names: list[str], project_id, subtopic_ids, limit: int) -> list:
     """Pure tag browse -- no query text at all, so there's no text/vector rank to sort by;
-    most-recently-updated first instead."""
+    newest event first instead (occurred_at, falling back to the last update)."""
     stmt = select(Entry.id).where(Entry.id.in_(_tag_filter_subquery(tag_names)))
     if project_id is not None:
         stmt = stmt.join(Subtopic, Entry.subtopic_id == Subtopic.id).where(Subtopic.project_id == project_id)
     if subtopic_ids is not None:
         stmt = stmt.where(Entry.subtopic_id.in_(subtopic_ids))
-    stmt = stmt.order_by(Entry.updated_at.desc()).limit(limit)
+    stmt = stmt.order_by(_effective_date_expr().desc(), Entry.updated_at.desc()).limit(limit)
     return [row[0] for row in (await session.execute(stmt)).all()]
 
 
@@ -152,6 +198,7 @@ async def search(
             session, [*fulltext_ids, *vector_ids], project_id, subtopic_ids, normalized_tags, limit=limit * 2
         )
         fused = _rrf_merge([fulltext_ids, vector_ids, relation_ids])
+        fused = await _apply_recency_boost(session, fused)
         top_ids = [item_id for item_id, _ in fused[:limit]]
 
     if not top_ids:

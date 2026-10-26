@@ -38,6 +38,10 @@
       <input type="text" name="tags" value="{{ tags_csv }}">
     </label>
 
+    <label>Ereignisdatum (wann ist das zuletzt Beschriebene passiert?)
+      <input type="date" name="occurred_at" value="{{ entry.occurred_at.isoformat() if entry and entry.occurred_at else '' }}">
+    </label>
+
     <label>Status
       <select name="follow_up_status">
         <option value="none" {{ "selected" if not entry or not entry.follow_up_status else "" }}>—</option>

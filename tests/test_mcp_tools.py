@@ -339,3 +339,28 @@ async def test_memory_find_similar_reports_by_default_then_links_with_auto_link(
     related_after = await mcp_client.call_tool("memory_get_related", {"entry_id": a_id})
     assert len(related_after.data) == 1
     assert related_after.data[0]["relation_type"] == "related_to"
+
+
+async def test_memory_upsert_occurred_at_round_trips_through_search(mcp_client):
+    created = await mcp_client.call_tool(
+        "memory_upsert",
+        {
+            "project": "mcptest",
+            "subtopic": "topic-occ",
+            "title": "Ereignis Pelletkessel",
+            "body_markdown": "Pelletkessel Begehung.",
+            "occurred_at": "2026-10-20",
+        },
+    )
+    assert created.data["occurred_at"] == "2026-10-20"
+
+    results = await mcp_client.call_tool("memory_search", {"query": "Pelletkessel", "project": "mcptest"})
+    match = next(e for e in results.data if e["id"] == created.data["id"])
+    assert match["occurred_at"] == "2026-10-20"
+
+    # omitted on a later write = untouched
+    again = await mcp_client.call_tool(
+        "memory_upsert",
+        {"project": "mcptest", "subtopic": "topic-occ", "title": "Ereignis Pelletkessel", "body_markdown": "Text."},
+    )
+    assert again.data["occurred_at"] == "2026-10-20"

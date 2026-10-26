@@ -4,6 +4,7 @@ DB-write + git-commit + entry_versions-row sequence from the design doc actually
 """
 
 import asyncio
+from datetime import date, datetime
 
 from slugify import slugify
 from sqlalchemy import delete, insert, select
@@ -23,6 +24,32 @@ from app.db.repository import (
 from app.services import sources as sources_service
 from app.services.embeddings import embed_passage_async
 from app.services.git_store import get_git_store, git_write_lock
+
+
+def _apply_occurred_at(entry: Entry, value: str | date | None) -> None:
+    """Same convention as follow_up_status: None leaves the field untouched, "none" (or an
+    empty string, which is what a cleared web date input submits) clears it, anything else
+    must be an ISO date. A full ISO timestamp is accepted and truncated to its date, since
+    callers often have one at hand (a mail's Date header, a message timestamp)."""
+    if value is None:
+        return
+    if isinstance(value, datetime):
+        entry.occurred_at = value.date()
+        return
+    if isinstance(value, date):
+        entry.occurred_at = value
+        return
+    value = value.strip()
+    if value in ("", "none"):
+        entry.occurred_at = None
+        return
+    try:
+        entry.occurred_at = date.fromisoformat(value)
+    except ValueError:
+        try:
+            entry.occurred_at = datetime.fromisoformat(value).date()
+        except ValueError as exc:
+            raise ValueError(f"occurred_at must be an ISO date (YYYY-MM-DD) or 'none', got {value!r}") from exc
 
 
 async def _set_tags(session: AsyncSession, entry: Entry, tag_names: list[str]) -> None:
@@ -99,6 +126,7 @@ async def _finalize_write(
         tags=tag_names,
         sources=[f"{t}:{r}" for t, r in source_rows],
         body_markdown=entry.body_markdown,
+        occurred_at=entry.occurred_at,
     )
     message = f"{action}: {path_parts[0]}/{subtopic_path_str}/{entry.slug}\n\nby {actor}"
 
@@ -143,11 +171,13 @@ async def upsert_entry(
     sources: list[tuple[str, str]] | None = None,
     tags: list[str] | None = None,
     follow_up_status: str | None = None,
+    occurred_at: str | date | None = None,
 ) -> Entry:
     """Create or update the entry identified by (subtopic, slugify(title)) within a project --
     the MCP tool's write path, where the caller only ever supplies a title, not an entry id.
     The subtopic path is auto-created if any level is missing. `follow_up_status` of "none"
-    clears the field; None (the default) leaves it untouched.
+    clears the field; None (the default) leaves it untouched. `occurred_at` follows the same
+    convention (ISO date, "none" clears, None leaves it alone).
 
     NOTE: this is keyed by (subtopic, slugify(title)) -- calling it again with a DIFFERENT
     title creates a new entry rather than renaming the existing one. For "I have an entry_id,
@@ -186,6 +216,7 @@ async def upsert_entry(
 
     if follow_up_status is not None:
         entry.follow_up_status = None if follow_up_status == "none" else follow_up_status
+    _apply_occurred_at(entry, occurred_at)
 
     await session.flush()
 
@@ -206,11 +237,12 @@ async def update_entry(
     actor: str,
     tags: list[str] | None = None,
     follow_up_status: str | None = None,
+    occurred_at: str | date | None = None,
 ) -> Entry:
     """Update an entry identified by its own id -- the web UI's edit-form write path. Unlike
     upsert_entry, a title change here renames the existing entry (and its git file) instead of
     creating a new one. Moving an entry to a different subtopic isn't supported (out of scope
-    for v1); only title/body/tags/follow_up_status can change."""
+    for v1); only title/body/tags/follow_up_status/occurred_at can change."""
     entry = await get_entry_by_id(session, entry_id)
     subtopic = await session.get(Subtopic, entry.subtopic_id)
 
@@ -234,6 +266,7 @@ async def update_entry(
     entry.updated_by = actor
     if follow_up_status is not None:
         entry.follow_up_status = None if follow_up_status == "none" else follow_up_status
+    _apply_occurred_at(entry, occurred_at)
 
     await session.flush()
 

@@ -71,8 +71,13 @@ write actually happens (`app/services/entries.py`'s `upsert_entry`/`update_entry
 (full-text, GIN-indexed) and a `pgvector` embedding (`intfloat/multilingual-e5-small`,
 HNSW-indexed), computed locally on CPU — no embeddings API call, no data leaving the box. A
 search merges both rankings with Reciprocal Rank Fusion, so an exact keyword match and a
-semantically related note that doesn't share any words both surface. See
-`app/services/search.py`.
+semantically related note that doesn't share any words both surface. The fused score then
+gets a mild multiplicative recency boost (`1 + 0.15 * 0.5^(age/90 days)`, tunable via
+`SEARCH_RECENCY_WEIGHT` / `SEARCH_RECENCY_HALF_LIFE_DAYS`, 0 disables it), so among
+similarly good matches the current state of a matter ranks first. Age is measured from the
+entry's `occurred_at` -- the date of the most recent real-world event it describes, set by
+the writer -- falling back to `updated_at` when that's unknown, since a re-check that merely
+touches an old entry shouldn't make it look fresh. See `app/services/search.py`.
 
 **Git is the real history; Postgres is the fast index into it.** Every write does: DB
 transaction → render+commit a markdown file (one `.md` per entry, YAML frontmatter) → insert an

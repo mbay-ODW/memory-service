@@ -35,6 +35,7 @@ def _entry_summary(entry, subtopic_path: str) -> dict:
         "subtopic": subtopic_path,
         "status": entry.status,
         "follow_up_status": entry.follow_up_status,
+        "occurred_at": entry.occurred_at.isoformat() if entry.occurred_at else None,
         "tags": [t.name for t in entry.tags],
         "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
         "updated_by": entry.updated_by,
@@ -75,7 +76,10 @@ async def memory_search(
     """Full-text + semantic search across memory entries. Scope to a project (and optionally
     a subtopic within it) to narrow results; omit both to search everything. `tags` filters to
     entries carrying ANY of the given tags (OR, not AND); `query` can be left empty to browse
-    purely by tag, sorted by most recently updated. Each result includes its exact `subtopic`
+    purely by tag, sorted by event date (`occurred_at`, falling back to last update). Ranking
+    gives a mild boost to recent entries (by `occurred_at`, else `updated_at`), so among
+    similarly good matches the current state of a matter comes first; a much better match
+    still wins over a merely newer one. Each result includes its exact `subtopic`
     path -- pass that back verbatim into memory_upsert's `subtopic` param to update this entry.
     Guessing the subtopic instead doesn't error, it silently creates a duplicate entry under
     the guessed path. If a result turns out to be about the same real-world thing as an entry
@@ -109,6 +113,7 @@ async def memory_upsert(
     sources: list[dict] | None = None,
     tags: list[str] | None = None,
     follow_up_status: str | None = None,
+    occurred_at: str | None = None,
 ) -> dict:
     """Create or update a memory entry, identified by (subtopic, title) within a project. To
     update an entry you already found via memory_get/memory_search, pass its exact `subtopic`
@@ -119,7 +124,11 @@ async def memory_upsert(
     git history in the same call. `sources` is a list of {"type":
     "mail"|"whatsapp"|"signal"|"paperless"|"nextcloud"|"hero", "ref": "..."}, used for
     provenance and by memory_check_sources for daily-sync dedup. `follow_up_status` is one of
-    null (don't change), "offen", "wartet", or "none" (clear it). The returned entry's
+    null (don't change), "offen", "wartet", or "none" (clear it). `occurred_at` is the date
+    (YYYY-MM-DD) of the most recent real-world event this entry describes -- the site visit,
+    the reply, the decision -- NOT the date you are writing it; set it whenever you add news
+    to an entry, leave it null when you only tidy up wording, "none" clears it. Search uses it
+    to rank the current state of a matter above stale ones. The returned entry's
     `subtopic` field confirms exactly where it landed."""
     source_pairs = [(s["type"], s["ref"]) for s in (sources or [])]
     async with get_session_factory()() as session:
@@ -134,6 +143,7 @@ async def memory_upsert(
             sources=source_pairs or None,
             tags=tags,
             follow_up_status=follow_up_status,
+            occurred_at=occurred_at,
         )
         return (await _entry_details(session, [entry]))[0]
 

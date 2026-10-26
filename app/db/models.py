@@ -1,10 +1,11 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     CheckConstraint,
     Computed,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -121,6 +122,11 @@ class Entry(Base):
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="aktuell")
     follow_up_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # When the most recent event this entry describes actually happened (a site visit, a
+    # reply, a decision) -- as opposed to updated_at, which only says when someone last wrote
+    # to the entry. A weekly re-check touching an old entry bumps updated_at but not this.
+    # NULL = unknown; search then falls back to updated_at for recency.
+    occurred_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

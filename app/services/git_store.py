@@ -8,7 +8,7 @@ working tree, not one-repo-per-writer.
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import frontmatter
@@ -37,16 +37,28 @@ class GitStore:
         except InvalidGitRepositoryError:
             self.repo = Repo.init(self.repo_path, initial_branch="main")
 
-    def render(self, *, title: str, subtopic_path: str, tags: list[str], sources: list[str], body_markdown: str) -> str:
-        post = frontmatter.Post(
-            body_markdown,
-            title=title,
-            subtopic=subtopic_path,
-            tags=tags,
-            sources=sources,
-            updated=datetime.now(timezone.utc).isoformat(),
-        )
-        return frontmatter.dumps(post)
+    def render(
+        self,
+        *,
+        title: str,
+        subtopic_path: str,
+        tags: list[str],
+        sources: list[str],
+        body_markdown: str,
+        occurred_at: date | None = None,
+    ) -> str:
+        metadata = {
+            "title": title,
+            "subtopic": subtopic_path,
+            "tags": tags,
+            "sources": sources,
+            "updated": datetime.now(timezone.utc).isoformat(),
+        }
+        # only written when known, so entries without an event date keep byte-identical
+        # frontmatter and their next unrelated edit doesn't show a spurious diff line
+        if occurred_at is not None:
+            metadata["occurred"] = occurred_at.isoformat()
+        return frontmatter.dumps(frontmatter.Post(body_markdown, **metadata))
 
     def write_and_commit(
         self,
