@@ -155,7 +155,14 @@ Idee aus dem Vergleich mit Hindsight (vectorize.io): Zeitpunkt des Ereignisses g
 - [x] search: Recency-Boost nach RRF auf der ganzen Kandidatenliste; Tag-Browse sortiert
       nach Ereignisdatum
 - [x] Tests (111 grün, gegen eingebettetes Postgres 16 + pgvector, weil Docker-VM voll war)
-- [ ] Deploy auf TrueNAS (Stack 59: Image bauen, `alembic upgrade head`)
+- [x] Deploy auf TrueNAS (2026-10-26): DB-Dump vorher nach `_stack-backups/`, Image explizit
+      gepullt, Stack 59 per PUT (env leer -- seit bab678a nur noch Secret-Dateien), erster PUT
+      hat recreatet; `alembic upgrade head` 0005 -> 0006 (im Container `DATABASE_URL` aus
+      `$DATABASE_URL_FILE` setzen, sonst Passwortfehler -- `docker exec` läuft nicht durch
+      env-secrets.sh). Smoke-Test in Prod: upsert mit Zeitstempel -> `occurred_at` 2026-10-25,
+      Suche liefert es, Eintrag gelöscht; 1442 Einträge unverändert.
+- [ ] CI-„Test" rot wegen ghcr.io-Rate-Limit beim Ziehen des Postgres-Service-Images
+      (`toomanyrequests`), nicht wegen der Tests -- seit 01.09. wiederkehrend
 - [ ] Sync-Prompts (`memory-sync-prompts/tages-sync.md`, `wochen-tiefenpruefung.md`) anweisen,
       `occurred_at` zu setzen -- sonst greift nur der updated_at-Fallback
 
