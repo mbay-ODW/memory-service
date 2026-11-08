@@ -14,6 +14,9 @@ os.environ.setdefault(
 )
 os.environ.setdefault("AUTH_MODE", "dev")
 os.environ.setdefault("DEV_BEARER_TOKEN", "test-token")
+# Existing web tests send Remote-User; tests/test_web_oidc.py switches to oidc on its own.
+os.environ.setdefault("WEB_AUTH_MODE", "header")
+os.environ.setdefault("WEB_COOKIE_SECURE", "false")
 
 from app.config import get_settings  # noqa: E402
 

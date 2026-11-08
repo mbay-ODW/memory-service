@@ -14,6 +14,9 @@
     <form class="topbar-search" action="/search" method="get">
       <input type="search" name="q" placeholder="Suche..." value="{{ query|default('') }}">
     </form>
+    <form class="topbar-logout" action="/auth/logout" method="post">
+      <button type="submit">Abmelden</button>
+    </form>
   </header>
   <main class="content">
     {% block content %}{% endblock %}

@@ -17,6 +17,16 @@ class Settings(BaseSettings):
     # Defaults to on so that a deployment which forgets the variable is closed, not
     # open; local development without a proxy sets it to false.
     web_auth_required: bool = True
+    # "oidc": own login, only the signed session cookie counts. "header": trust Remote-User,
+    # only for setups where nothing but a trusted proxy can reach the container.
+    web_auth_mode: Literal["oidc", "header"] = "oidc"
+    web_public_url: str = ""
+    web_oidc_issuer: str = ""
+    web_oidc_client_id: str = "memory-service-web"
+    web_oidc_client_secret: str = ""
+    web_session_secret: str = ""
+    web_session_max_age_seconds: int = 8 * 60 * 60
+    web_cookie_secure: bool = True
 
     oidc_introspection_url: str = ""
     oidc_client_id: str = "memory-service"
