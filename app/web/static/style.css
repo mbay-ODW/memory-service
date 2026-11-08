@@ -232,3 +232,5 @@ td.diff_chg { background: #fef9c3; }
 #relation-graph .graph-node circle { fill: var(--accent); stroke: var(--bg); stroke-width: 2px; }
 #relation-graph .graph-node.veraltet circle { fill: var(--muted); }
 #relation-graph .graph-empty { fill: var(--muted); font-size: 0.9rem; }
+
+.topbar-logout { margin-left: auto; }
